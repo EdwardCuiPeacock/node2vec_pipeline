@@ -1,0 +1,63 @@
+# This file sets up the environment variables of the job run
+pipeline_name: node2vec_sports_syn
+pipeline_version: "0_0_0" # must be in  this format
+description: |
+  This optional field is used to describe the job run.
+system_configurations:
+  gcs_bucket_name: 
+    description: Google Cloud Storage bucket name
+    type: string
+    value: "gs://edc-dev/kubeflowpipelines-default"
+  google_cloud_region:
+    description: Region to use GCP services including BigQuery, 
+      Dataflow and Cloud AI Platform.
+    type: string
+    value: us-east1
+  google_cloud_project:
+    description: Google cloud project name
+    type: string
+    value: res-nbcupea-dev-ds-sandbox-001
+  endpoint:
+    description: Google Cloud Endpoint
+    type: string
+    value: df6bc4688870067-dot-us-east1.pipelines.googleusercontent.com
+  kubeflow_runner:
+    description: Kubeflow runner .py script to use
+    type: string
+    value: kubeflow_runner.py
+  tfx_image_repo_name:
+    description: Name of the repository on Container Registry, gcr.io/{GOOGLE_CLOUD_PROJECT}/{TFX_IMAGE_REPO_NAME}
+    type: string
+    value: tfx-pipeline
+  enable_cache:
+    description: whether or not to enable caching of execution results.
+    type: boolean
+    value: False
+model_configurations:
+  processing_fn:
+    description: Import path to the preprocessing function relative to the working directory 
+    type: string
+    value: models.preprocessing.preprocessing_fn
+  run_fn:
+    description: Import path to the model run function relative to the working directory
+    type: string
+    value: models.keras.model.run_fn
+  num_epochs: 
+    description: Number of training epochs
+    type: int
+    value: 1000
+  batch_size: 
+    description: Batch size of training
+    type: int
+    value: 150
+  eval_batch_size:
+    description: Batch size of evaluation. If null, use training batch size
+    value: null
+  eval_accuracy_threshold:
+    description: Evaluation accuracy threshold
+    type: float
+    value: 0.6
+  query_sample_rate: 
+    description: Random sample rate
+    type: float
+    value: 0.0001

@@ -1,0 +1,12 @@
+# tfx
+template.tar.gz  # Pipeline definition file in argo format for Kubeflow.
+tfx_pipeline_output  # Default pipeline output directory
+tfx_metadata  # Default tfx metadata SQLite DB directory
+
+# cache
+__pycache__/
+
+# editor meta files
+.vscode/
+.idea/
+.DS_Store

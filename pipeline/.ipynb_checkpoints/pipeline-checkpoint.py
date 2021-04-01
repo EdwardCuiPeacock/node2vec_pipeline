@@ -62,7 +62,7 @@ def create_pipeline(
     components = []
     # %%
     # ExampleGen: Load the graph data from bigquery
-    query_str = load_query_string(query, field_dict={"GOOGLE_CLOUD_PROJECT": system_config["google_cloud_project"]})
+    query_str = load_query_string(query, field_dict={"GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"]})
     example_gen = BigQueryExampleGen(query=query_str)
     components.append(example_gen)
 

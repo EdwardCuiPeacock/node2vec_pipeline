@@ -60,8 +60,8 @@ def run(metadata_file: Optional[Text] = None):
             query=model_config["query_script_path"],
             preprocessing_fn=model_config["preprocessing_fn"],
             run_fn=model_config["run_fn"],
-            train_args=trainer_pb2.TrainArgs(batch_size=model_config["batch_size"]),
-            eval_args=trainer_pb2.EvalArgs(batch_size=model_config["eval_batch_size"]),
+            train_args=trainer_pb2.TrainArgs(num_steps=100),
+            eval_args=trainer_pb2.EvalArgs(num_steps=50),
             model_serve_dir=system_config["model_serve_dir"],
             # (Optional) Uncomment below to use provide GCP related
             #               config for BigQuery with Beam DirectRunner.

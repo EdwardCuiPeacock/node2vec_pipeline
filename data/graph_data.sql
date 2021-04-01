@@ -75,3 +75,4 @@ UNION ALL
         LEFT OUTER JOIN `{GOOGLE_CLOUD_PROJECT}.recsystem.stop_words_en_sp` stop ON stop.string_field_0 = t.token
     WHERE stop.string_field_0 IS NULL
 )
+LIMIT 100

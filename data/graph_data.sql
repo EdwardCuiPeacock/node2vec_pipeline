@@ -1,4 +1,5 @@
 -- SQL query string to load the graph data
+-- Jinja2 templated
 -- * GOOGLE_CLOUD_PROJECT: GCP Bigquery database project name
 WITH titles AS (
     SELECT DISTINCT COALESCE(InSeasonSeries_Id, TitleId) as InSeasonSeries_Id,
@@ -7,7 +8,7 @@ WITH titles AS (
         TitleTags,
         TitleSubgenres,
         TitleType
-    FROM `{GOOGLE_CLOUD_PROJECT}.recsystem.ContentMetadataView`
+    FROM `{{ GOOGLE_CLOUD_PROJECT }}.recsystem.ContentMetadataView`
 ),
 melted AS (
     SELECT DISTINCT InSeasonSeries_Id,
@@ -50,7 +51,7 @@ token_table AS (
             ' '
         ) AS tokens,
         -- filter out non-alphabetical characters
-    FROM `{GOOGLE_CLOUD_PROJECT}.recsystem.ContentMetadataView`
+    FROM `{{ GOOGLE_CLOUD_PROJECT }}.recsystem.ContentMetadataView`
 ),
 -- unnest token
 token_clean AS (
@@ -72,7 +73,7 @@ UNION ALL
         token,
         token_count
     FROM token_clean t
-        LEFT OUTER JOIN `{GOOGLE_CLOUD_PROJECT}.recsystem.stop_words_en_sp` stop ON stop.string_field_0 = t.token
+        LEFT OUTER JOIN `{{ GOOGLE_CLOUD_PROJECT }}.recsystem.stop_words_en_sp` stop ON stop.string_field_0 = t.token
     WHERE stop.string_field_0 IS NULL
 )
 LIMIT 100

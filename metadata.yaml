@@ -5,7 +5,7 @@ description: |
   This pipeline runs the node2vec model on TFX with tensorflow / Keras
   system_configuration: All fields are required for the pipeline to run properly
   model_configuration: Additional custom arguments exposed to the model.
-  For string or array of strings fields, templating is supported.
+  For strings, array of strings,or object (dict) fields, Jinja2 templating is supported.
 system_configurations:
   GCS_BUCKET_NAME: 
     description: Google Cloud Storage bucket name to store pipeline outputs
@@ -27,31 +27,52 @@ system_configurations:
   TFX_IMAGE:
     description: |
       Name of the repository on Container Registry.
-      Can be templated with defined variables under system_configurations.
     type: string
-    value: 'gcr.io/{GOOGLE_CLOUD_PROJECT}/tfx-pipeline'
-  DATAFLOW_BEAM_PIPELINE_ARGS:
-    description: |
-      Settings for beam pipeline. Needed for bigquery. 
-      Can be templated with defined variables under system_configurations.
-    type: array
-    value:
-      - '--project={GOOGLE_CLOUD_PROJECT}'
-      - '--runner=DataflowRunner'
-      - '--temp_location=gs://{GCS_BUCKET_NAME}/tmp'
-      - '--region={GOOGLE_CLOUD_REGION}'
-      - '--disk_size_gb=50'
-      - '--machine_type=e2-standard-8'
-  KUBEFLOW_RUNNER:
-    description: Kubeflow runner .py script to use
-    type: string
-    value: kubeflow_runner.py
+    value: "gcr.io/{{ GOOGLE_CLOUD_PROJECT }}/tfx-pipeline"
   PIPELINE_ROOT:
     description: |
       TFX produces two types of outputs, files and metadata.
       Files will be created under PIPELINE_ROOT directory.
     type: string
-    value: '{GCS_BUCKET_NAME}/tfx_pipeline_output/{pipeline_name}_{pipeline_version}'
+    value: "{{ GCS_BUCKET_NAME }}/tfx_pipeline_output/{{ pipeline_name }}_{{ pipeline_version }}"
+  MODEL_SERVE_DIR:
+    description: |
+      The last component of the pipeline, Pusher will produce serving 
+      model under model_serve_dir.
+    type: string
+    value: "{{ PIPELINE_ROOT }}/serving_model"
+  DATAFLOW_BEAM_PIPELINE_ARGS:
+    description: |
+      Settings for beam pipeline. Needed for bigquery. 
+    type: array
+    value:
+      - "--project={{ GOOGLE_CLOUD_PROJECT }}"
+      - "--runner=DataflowRunner"
+      - "--temp_location={{ GCS_BUCKET_NAME }}/tmp"
+      - "--region={{ GOOGLE_CLOUD_REGION }}"
+      - "--disk_size_gb=50"
+      - "--machine_type=e2-standard-8"
+  GCP_AI_PLATFORM_TRAINING_ARGS:
+    description: GCP AI platform settings
+    type: object
+    value:
+      project: "{{ GOOGLE_CLOUD_PROJECT }}"
+      region:  "{{ GOOGLE_CLOUD_REGION }}"
+      scaleTier: CUSTOM
+      # This is a GPU-enabled VM. See
+      # https://cloud.google.com/ai-platform/training/docs/using-gpus
+      masterType: n1-highmem-16
+      masterConfig: 
+        imageUri: "{{ TFX_IMAGE }}"
+        acceleratorConfig:
+            count: 2 # number of accelerators
+            # See GPU accelerators descriptions at
+            # https://cloud.google.com/ai-platform/training/docs/reference/rest/v1/AcceleratorType
+            type: NVIDIA_TESLA_T4
+  KUBEFLOW_RUNNER:
+    description: Kubeflow runner .py script to use
+    type: string
+    value: kubeflow_runner.py
   enable_cache:
     description: Whether or not to enable caching of execution results
     type: boolean
@@ -71,14 +92,15 @@ model_configurations:
     value: data/graph_data.sql
   num_epochs: 
     description: Number of training epochs
-    type: int
+    type: integer
     value: 1000
   batch_size: 
     description: Batch size of training
-    type: int
+    type: integer
     value: 150
   eval_batch_size:
     description: Batch size of evaluation. If null, use training batch size
+    type: integer
     value: null
   eval_accuracy_threshold:
     description: Evaluation accuracy threshold

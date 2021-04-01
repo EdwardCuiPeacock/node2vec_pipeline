@@ -62,16 +62,15 @@ def run(metadata_file: Optional[Text] = None):
             pipeline_name=metadata["pipeline_name"]
             + "_"
             + metadata["pipeline_version"],
-            pipeline_root=system_config["pipeline_root"],
+            pipeline_root=system_config["PIPELINE_ROOT"],
             query=model_config["query_script_path"],
             preprocessing_fn=system_config["preprocessing_fn"],
             run_fn=system_config["run_fn"],
             train_args=trainer_pb2.TrainArgs(num_steps=100),
             eval_args=trainer_pb2.EvalArgs(num_steps=50),
-            model_serve_dir=system_config["model_serve_dir"],
+            model_serve_dir=system_config["MODEL_SERVE_DIR"],
             beam_pipeline_args=system_config["DATAFLOW_BEAM_PIPELINE_ARGS"],
-            # (Optional) Uncomment below to use Cloud AI Platform.
-            # ai_platform_training_args=system_config["GCP_AI_PLATFORM_TRAINING_ARGS"],
+            ai_platform_training_args=system_config["GCP_AI_PLATFORM_TRAINING_ARGS"],
             # (Optional) Uncomment below to use Cloud AI Platform.
             # ai_platform_serving_args=system_config["GCP_AI_PLATFORM_SERVING_ARGS"],
             enable_cache=system_config["enable_cache"],

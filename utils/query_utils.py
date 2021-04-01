@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+import jinja2
 from typing import Text, Dict, Optional
 
 
@@ -16,7 +17,7 @@ def load_query_string(query_file_path:Text, field_dict:Optional[Dict] = None) ->
     
     # Apply / parse any templated fields
     if field_dict is not None:
-        query_str = query_str.format(**field_dict)
+        query_str = jinja2.Template(query_str).render(**field_dict)
     
     return query_str
         

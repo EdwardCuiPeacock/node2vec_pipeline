@@ -6,6 +6,9 @@ tfx_metadata  # Default tfx metadata SQLite DB directory
 # cache
 __pycache__/
 
+# IPython checkpoints
+.ipynb_checkpoints/
+
 # editor meta files
 .vscode/
 .idea/

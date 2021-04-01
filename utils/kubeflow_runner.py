@@ -7,10 +7,10 @@ import os
 from typing import Text, Optional
 from absl import logging
 
-from utils.metadata_utils import get_metadata, get_config
+from ..utils.metadata_utils import get_metadata, get_config
 
-from pipeline import configs
-from pipeline import pipeline
+from ..pipeline import configs
+from ..pipeline import pipeline
 from tfx.orchestration.kubeflow import kubeflow_dag_runner
 from tfx.proto import trainer_pb2
 from tfx.utils import telemetry_utils

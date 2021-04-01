@@ -1,5 +1,9 @@
-"""Define KubeflowDagRunner to run the pipeline using Kubeflow.
-Whereever this script resides will be treated as the base directory for the pipeline!"""
+"""
+Define KubeflowDagRunner to run the pipeline using Kubeflow.
+Where-ever this script resides is the base directory for the pipeline.
+In theory, this script never needs to be changed, unless further fine 
+control of run details is needed.
+"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -36,7 +40,7 @@ def run(metadata_file: Optional[Text] = None):
     metadata = get_metadata(metadata_file)
     system_config = get_config(metadata, "system_configurations")
     model_config = get_config(metadata, "model_configurations")
-    # tfx_image = system_config.get("tfx_image", None)
+    # tfx_image = system_config.get("TFX_IMAGE", None)
     tfx_image = os.environ.get("KUBEFLOW_TFX_IMAGE", None)
     logging.info(f"Current tfx image used: {tfx_image}")
 
@@ -65,17 +69,12 @@ def run(metadata_file: Optional[Text] = None):
             train_args=trainer_pb2.TrainArgs(num_steps=100),
             eval_args=trainer_pb2.EvalArgs(num_steps=50),
             model_serve_dir=system_config["model_serve_dir"],
-            # (Optional) Uncomment below to use provide GCP related
-            #               config for BigQuery with Beam DirectRunner.
-            # beam_pipeline_args=system_config[
-            #     "BIG_QUERY_WITH_DIRECT_RUNNER_BEAM_PIPELINE_ARGS"
-            # ],
-            # (Optional) Uncomment below to use Dataflow.
-            # beam_pipeline_args=system_config["DATAFLOW_BEAM_PIPELINE_ARGS"],
+            beam_pipeline_args=system_config["DATAFLOW_BEAM_PIPELINE_ARGS"],
             # (Optional) Uncomment below to use Cloud AI Platform.
             # ai_platform_training_args=system_config["GCP_AI_PLATFORM_TRAINING_ARGS"],
             # (Optional) Uncomment below to use Cloud AI Platform.
             # ai_platform_serving_args=system_config["GCP_AI_PLATFORM_SERVING_ARGS"],
+            enable_cache=system_config["enable_cache"],
             system_config=system_config,  # passing config parameters downstream
             model_config=model_config,  # passing model parameters downstream
         )

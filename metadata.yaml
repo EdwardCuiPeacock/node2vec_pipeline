@@ -35,7 +35,7 @@ system_configurations:
     description: Kubeflow runner .py script to use
     type: string
     value: kubeflow_runner.py
-  processing_fn:
+  preprocessing_fn:
     description: Import path to the preprocessing function relative to the working directory 
     type: string
     value: models.preprocessing.preprocessing_fn
@@ -48,6 +48,7 @@ model_configurations:
     description: Path to BigQuery script
     type: string
     value: data.graph_data.sql
+  
   num_epochs: 
     description: Number of training epochs
     type: int

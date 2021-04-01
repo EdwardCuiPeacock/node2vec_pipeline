@@ -1,4 +1,5 @@
-"""Define KubeflowDagRunner to run the pipeline using Kubeflow."""
+"""Define KubeflowDagRunner to run the pipeline using Kubeflow.
+Whereever this script resides will be treated as the base directory for the pipeline!"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -7,10 +8,11 @@ import os
 from typing import Text, Optional
 from absl import logging
 
-from ..utils.metadata_utils import get_metadata, get_config
+from utils.metadata_utils import get_metadata, get_config
 
-from ..pipeline import configs
-from ..pipeline import pipeline
+from pipeline import configs
+from pipeline import pipeline
+
 from tfx.orchestration.kubeflow import kubeflow_dag_runner
 from tfx.proto import trainer_pb2
 from tfx.utils import telemetry_utils
@@ -58,8 +60,8 @@ def run(metadata_file: Optional[Text] = None):
             + metadata["pipeline_version"],
             pipeline_root=system_config["pipeline_root"],
             query=model_config["query_script_path"],
-            preprocessing_fn=model_config["preprocessing_fn"],
-            run_fn=model_config["run_fn"],
+            preprocessing_fn=system_config["preprocessing_fn"],
+            run_fn=system_config["run_fn"],
             train_args=trainer_pb2.TrainArgs(num_steps=100),
             eval_args=trainer_pb2.EvalArgs(num_steps=50),
             model_serve_dir=system_config["model_serve_dir"],

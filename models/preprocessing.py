@@ -50,6 +50,8 @@ def preprocessing_fn(inputs):
     output["token"] = tft.apply_vocabulary(
         token, deferred_vocab_filename_tensor=vocab_uri, default_value=0
     )
-    output["weight"] = tf.constant([1.0], dtype="float32") / tf.cast(token_count, "float32")
-    
+    output["weight"] = tf.constant([1.0], dtype="float32") / tf.cast(
+        token_count, "float32"
+    )
+
     return output

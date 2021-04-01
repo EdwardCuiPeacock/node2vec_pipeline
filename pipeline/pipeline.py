@@ -4,6 +4,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl import logging
+import re
 from typing import Any, Dict, List, Optional, Text
 
 import tensorflow_model_analysis as tfma
@@ -62,7 +64,10 @@ def create_pipeline(
     components = []
     # %%
     # ExampleGen: Load the graph data from bigquery
-    query_str = load_query_string(query, field_dict={"GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"]})
+    query_str = load_query_string(
+        query,
+        field_dict={"GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"]},
+    )
     example_gen = BigQueryExampleGen(query=query_str)
     components.append(example_gen)
 
@@ -109,21 +114,30 @@ def create_pipeline(
         "transform_graph": transform.outputs["transform_graph"],
         "train_args": train_args,
         "eval_args": eval_args,
+        "custom_config": model_config,
         "custom_executor_spec": executor_spec.ExecutorClassSpec(
             trainer_executor.GenericExecutor
         ),
     }
+
     if ai_platform_training_args is not None:
-        trainer_args.update(
-            {
-                "custom_executor_spec": executor_spec.ExecutorClassSpec(
-                    ai_platform_trainer_executor.GenericExecutor
-                ),
-                "custom_config": {
-                    ai_platform_trainer_executor.TRAINING_ARGS_KEY: ai_platform_training_args,
-                },
-            }
+        trainer_args["custom_executor_spec"] = executor_spec.ExecutorClassSpec(
+            ai_platform_trainer_executor.GenericExecutor
         )
+
+        trainer_args["custom_config"][
+            ai_platform_trainer_executor.TRAINING_ARGS_KEY
+        ] = ai_platform_training_args
+
+        # Lowercase and replace illegal characters in labels."""
+        # See https://cloud.google.com/compute/docs/naming-resources.
+        trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
+            "tfx_{}_{}".format(
+                re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower())[-63:], "prod"
+            ),
+        )
+    logging.info("trainer arguments", trainer_args)
+
     trainer = Trainer(**trainer_args)
     components.append(trainer)
 

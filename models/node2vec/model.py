@@ -15,26 +15,32 @@ from models import features
 from tfx_bsl.tfxio import dataset_options
 
 
-def tensor2tfrecord(S, data_uri='temp.tfrecord'):
+def tensor2tfrecord(S, data_uri="temp.tfrecord"):
     """Write a tensor to a single TFRecord file."""
-    ds = (tf.data.Dataset.from_tensor_slices(S)
-      .map(tf.io.serialize_tensor))
+    ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
     writer = tf.data.experimental.TFRecordWriter(data_uri)
     writer.write(ds)
 
-def record2tensor(data_uri='temp.tfrecord'):
+
+def record2tensor(data_uri="temp.tfrecord"):
     """Read from a TFRecord file or a list of files."""
     parse_tensor_f = lambda x: tf.io.parse_tensor(x, tf.int64)
-    dataset = (tf.data.TFRecordDataset(data_uri)
-        .map(parse_tensor_f))
+    dataset = tf.data.TFRecordDataset(data_uri).map(parse_tensor_f)
     return dataset
 
-def _create_sampled_training_data(dataset, num_nodes, p, q, walk_length, repetitions, storage_path):
+
+def _create_sampled_training_data(
+    dataset, num_nodes, p, q, walk_length, repetitions, storage_path
+):
     # dataset = [""]
     # Build the graph from the entire dataset
-    indices = tf.concat([tf.expand_dims(dataset["content"], axis=1), 
-                         tf.expand_dims(dataset["token"],   axis=1)], 
-                         axis=1)
+    indices = tf.concat(
+        [
+            tf.expand_dims(dataset["content"], axis=1),
+            tf.expand_dims(dataset["token"], axis=1),
+        ],
+        axis=1,
+    )
     values = dataset["weight"]
     W = tf.sparse.SparseTensor(indices, values, dense_shape=(num_nodes, num_nodes))
 
@@ -51,7 +57,7 @@ def _create_sampled_training_data(dataset, num_nodes, p, q, walk_length, repetit
         data_uri_list.append(data_uri)
 
     return data_uri_list
-    
+
 
 def _input_fn(file_pattern, data_accessor, tf_transform_output, batch_size=128):
     """
@@ -161,12 +167,14 @@ def run_fn(fn_args):
             File path for training data.
         - fn_args.eval_files: str
             File path for evaluation data.
-        - fn_args.data_accessor: DataAccessor 
+        - fn_args.data_accessor: DataAccessor
             DataAccessor for converting input to RecordBatch.
         - fn_args.model_run_dir: str
             Path to model running directory.
         - fn_args.model_serve_dir: str
             Path to model serving directory.
+        - fn_args.custom_config: dict
+            A dictionary of additional custom configs for modeling.
     """
     # ?? tfx.components.trainer.fn_args_utils.FnArgs
     fn_type = type(fn_args)
@@ -174,7 +182,7 @@ def run_fn(fn_args):
 
     fn_lists = str(fn_args.__dict__)
     logging.info(f"fn attributes {fn_lists}")
-    
+
     tf_transform_output = tft.TFTransformOutput(fn_args.transform_output)
 
     train_dataset = _input_fn(
@@ -187,14 +195,14 @@ def run_fn(fn_args):
         fn_args.eval_files,
         fn_args.data_accessor,
         tf_transform_output,
-        fn_args.config.get("eval_batch_size") or \
-            fn_args.config.get("batch_size", 128), # default to train batch_size
+        fn_args.config.get("eval_batch_size")
+        or fn_args.config.get("batch_size", 128),  # default to train batch_size
     )
 
     mirrored_strategy = tf.distribute.MirroredStrategy()
     with mirrored_strategy.scope():
         model = _build_keras_model(
-            vocab_size=fn_args.vocab_size, 
+            vocab_size=fn_args.vocab_size,
             embed_size=fn_args.config.get("embed_size", 32),
             num_samples=fn_args.config.get("num_samples", 12),
             loss="sparse_categorical_crossentropy",
@@ -211,9 +219,9 @@ def run_fn(fn_args):
     model.fit(
         train_dataset,
         epochs=fn_args.config.get("num_epochs", 30),
-        steps_per_epoch=30, # TODO: this can be precomputed based on data size
+        steps_per_epoch=30,  # TODO: this can be precomputed based on data size
         validation_data=eval_dataset,
-        validation_steps=150, # TODO: this can be preocmputed based on the data size
+        validation_steps=150,  # TODO: this can be preocmputed based on the data size
         callbacks=[tensorboard_callback],
     )
 

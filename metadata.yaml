@@ -108,13 +108,13 @@ model_configurations:
     value: 0.6
   num_neg_samples:
     description: Number of negative samples to take for subsample softmax training
-    type: int
+    type: integer
     value: 12
   walk_length:
     description: node2vec graph traversal walk length
-    type: int
+    type: integer
     value: 80
   repetitions:
     description: node2vec graph traversal repetitions
-    type: int
+    type: integer
     value: 5

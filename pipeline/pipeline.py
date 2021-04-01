@@ -41,25 +41,26 @@ from ml_metadata.proto import metadata_store_pb2
 def create_pipeline(
     pipeline_name: Text,
     pipeline_root: Text,
-    data_path: Text,
     query: Text,
     preprocessing_fn: Text,
     run_fn: Text,
     train_args: trainer_pb2.TrainArgs,
     eval_args: trainer_pb2.EvalArgs,
-    eval_accuracy_threshold: float,
-    serving_model_dir: Text,
+    model_serve_dir: Text,
     metadata_connection_config: Optional[metadata_store_pb2.ConnectionConfig] = None,
     beam_pipeline_args: Optional[List[Text]] = None,
     ai_platform_training_args: Optional[Dict[Text, Text]] = None,
     ai_platform_serving_args: Optional[Dict[Text, Any]] = None,
+    system_config: Optional[Dict[Text, Any]] = None,
+    model_config: Optional[Dict[Text, Any]] = None,
 ) -> pipeline.Pipeline:
     """Implements the chicago taxi pipeline with TFX."""
 
     components = []
     # %%
     # ExampleGen: Load the graph data from bigquery
-    example_gen = BigQueryExampleGen(query=query)
+    query_str = query.format(GOOGLE_CLOUD_PROJECT=system_config["google_cloud_project"])
+    example_gen = BigQueryExampleGen(query=query_str)
     components.append(example_gen)
 
     # %%
@@ -121,7 +122,7 @@ def create_pipeline(
             }
         )
     trainer = Trainer(**trainer_args)
-    # components.append(trainer)
+    components.append(trainer)
 
     # %%
     # ResolveNode:
@@ -148,7 +149,7 @@ def create_pipeline(
                         class_name="BinaryAccuracy",
                         threshold=tfma.MetricThreshold(
                             value_threshold=tfma.GenericValueThreshold(
-                                lower_bound={"value": eval_accuracy_threshold}
+                                lower_bound={"value": 0.1}
                             ),
                             change_threshold=tfma.GenericChangeThreshold(
                                 direction=tfma.MetricDirection.HIGHER_IS_BETTER,
@@ -178,7 +179,7 @@ def create_pipeline(
         "model_blessing": evaluator.outputs["blessing"],
         "push_destination": pusher_pb2.PushDestination(
             filesystem=pusher_pb2.PushDestination.Filesystem(
-                base_directory=serving_model_dir
+                base_directory=model_serve_dir,
             )
         ),
     }
@@ -201,9 +202,7 @@ def create_pipeline(
         pipeline_name=pipeline_name,
         pipeline_root=pipeline_root,
         components=components,
-        # Change this value to control caching of execution results. Default value
-        # is `False`.
-        # enable_cache=True,
+        enable_cache=system_config["enable_cache"],
         metadata_connection_config=metadata_connection_config,
         beam_pipeline_args=beam_pipeline_args,
     )

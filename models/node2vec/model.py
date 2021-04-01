@@ -10,6 +10,10 @@ import tensorflow as tf
 import tensorflow_transform as tft
 
 from models.node2vec.node2vec import SkipGram, sample_1_iteration
+from models import features
+
+from tfx_bsl.tfxio import dataset_options
+
 
 def tensor2tfrecord(S, data_uri='temp.tfrecord'):
     """Write a tensor to a single TFRecord file."""
@@ -167,8 +171,10 @@ def run_fn(fn_args):
     # ?? tfx.components.trainer.fn_args_utils.FnArgs
     fn_type = type(fn_args)
     logging.info(f"fn_args type: {fn_type}")
-    
 
+    fn_lists = str(fn_args.__dict__)
+    logging.info(f"fn attributes {fn_lists}")
+    
     tf_transform_output = tft.TFTransformOutput(fn_args.transform_output)
 
     train_dataset = _input_fn(

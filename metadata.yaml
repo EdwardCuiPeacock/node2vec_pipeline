@@ -2,10 +2,12 @@
 pipeline_name: node2vec_sports_syn
 pipeline_version: "0_0_0" # must be in  this format
 description: |
-  This optional field is used to describe the job run.
+  This pipeline runs the node2vec model on TFX with tensorflow / Keras
+  system_configuration: All fields are required for the pipeline to run properly
+  model_configuration: Additional custom arguments exposed to the model
 system_configurations:
   gcs_bucket_name: 
-    description: Google Cloud Storage bucket name
+    description: Google Cloud Storage bucket name to store pipeline outputs
     type: string
     value: "gs://edc-dev/kubeflowpipelines-default"
   google_cloud_region:
@@ -21,19 +23,18 @@ system_configurations:
     description: Google Cloud Endpoint
     type: string
     value: df6bc4688870067-dot-us-east1.pipelines.googleusercontent.com
-  kubeflow_runner:
-    description: Kubeflow runner .py script to use
-    type: string
-    value: kubeflow_runner.py
   tfx_image_repo_name:
     description: Name of the repository on Container Registry, gcr.io/{GOOGLE_CLOUD_PROJECT}/{TFX_IMAGE_REPO_NAME}
     type: string
     value: tfx-pipeline
   enable_cache:
-    description: whether or not to enable caching of execution results.
+    description: Whether or not to enable caching of execution results
     type: boolean
     value: False
-model_configurations:
+  kubeflow_runner:
+    description: Kubeflow runner .py script to use
+    type: string
+    value: kubeflow_runner.py
   processing_fn:
     description: Import path to the preprocessing function relative to the working directory 
     type: string
@@ -42,6 +43,11 @@ model_configurations:
     description: Import path to the model run function relative to the working directory
     type: string
     value: models.keras.model.run_fn
+model_configurations:
+  query_script_path:
+    description: Path to BigQuery script
+    type: string
+    value: data.graph_data.sql
   num_epochs: 
     description: Number of training epochs
     type: int
@@ -57,7 +63,15 @@ model_configurations:
     description: Evaluation accuracy threshold
     type: float
     value: 0.6
-  query_sample_rate: 
-    description: Random sample rate
-    type: float
-    value: 0.0001
+  num_neg_samples:
+    description: Number of negative samples to take for subsample softmax training
+    type: int
+    value: 12
+  walk_length:
+    description: node2vec graph traversal walk length
+    type: int
+    value: 80
+  repetitions:
+    description: node2vec graph traversal repetitions
+    type: int
+    value: 5

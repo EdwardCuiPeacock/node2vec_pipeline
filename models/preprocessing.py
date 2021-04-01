@@ -17,17 +17,22 @@ from models import features
 def preprocessing_fn(inputs):
     """
     Preprocess data inputs.
+    This a callback function for tfx.components.Transform
 
     Parameters
     ----------
-    inputs : dict-like
-        map from feature keys to raw not-yet-transformed features.
+    inputs : dict, tensorflow_transform data
+        Data beging fed into tfx.components.Transform
+        Map from feature keys to raw not-yet-transformed features.
 
     Returns
     -------
     output: dict
         Map from string feature key to transformed feature operations.
     """
+    preproc_input_type = type(inputs)
+    logging.info("preprocessing_fn input type: {preproc_input_type}")
+
     # String to integer indexing
     content = inputs["InSeasonSeries_Id"]
     token = inputs["token"]

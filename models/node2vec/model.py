@@ -42,6 +42,7 @@ def _create_sampled_training_data(
         axis=1,
     )
     values = dataset["weight"]
+    num_nodes = tf.shape(tf.unique(tf.reshape(indices, shape=(-1, )))[0])[0]
     W = tf.sparse.SparseTensor(indices, values, dense_shape=(num_nodes, num_nodes))
 
     data_uri_list = []

@@ -136,7 +136,8 @@ def create_pipeline(
                 re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower())[-63:], "prod"
             ),
         )
-    logging.info("trainer arguments", trainer_args)
+    logging.info("trainer arguments")
+    logging.inf(trainer_args)
 
     trainer = Trainer(**trainer_args)
     components.append(trainer)

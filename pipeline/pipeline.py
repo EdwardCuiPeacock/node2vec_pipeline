@@ -32,6 +32,7 @@ from tfx.extensions.google_cloud_big_query.example_gen.component import (
 from tfx.orchestration import pipeline
 from tfx.proto import pusher_pb2
 from tfx.proto import trainer_pb2
+from tfx.proto import example_gen_pb2
 from tfx.types import Channel
 from tfx.types.standard_artifacts import Model
 from tfx.types.standard_artifacts import ModelBlessing
@@ -68,7 +69,16 @@ def create_pipeline(
         query,
         field_dict={"GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"]},
     )
-    example_gen = BigQueryExampleGen(query=query_str)
+    
+    output_config = example_gen_pb2.Output(
+        split_config=example_gen_pb2.SplitConfig(
+            splits=[ # Generate no splitting, as we need to load everything
+                example_gen_pb2.SplitConfig.Split(name='train', hash_buckets=1),
+            ],
+        )
+    )
+    
+    example_gen = BigQueryExampleGen(query=query_str, output_config=output_config)
     components.append(example_gen)
 
     # %%
@@ -114,7 +124,7 @@ def create_pipeline(
         "transform_graph": transform.outputs["transform_graph"],
         "train_args": train_args,
         "eval_args": eval_args,
-        "custom_config": model_config,
+        "custom_config": {"model_config": model_config, "system_config": system_config},
         "custom_executor_spec": executor_spec.ExecutorClassSpec(
             trainer_executor.GenericExecutor
         ),
@@ -131,13 +141,13 @@ def create_pipeline(
 
         # Lowercase and replace illegal characters in labels."""
         # See https://cloud.google.com/compute/docs/naming-resources.
-        trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
-            "tfx_{}_{}".format(
-                re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower())[-63:], "prod"
-            ),
-        )
+        #trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
+        #    "tfx_{}_{}".format(
+        #        re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower())[-63:], "experiment"
+        #    ),
+        #)
     logging.info("trainer arguments")
-    logging.inf(trainer_args)
+    logging.info(trainer_args)
 
     trainer = Trainer(**trainer_args)
     components.append(trainer)

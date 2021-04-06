@@ -11,8 +11,6 @@ from absl import logging
 import tensorflow as tf
 import tensorflow_transform as tft
 
-from models import features
-
 
 def preprocessing_fn(inputs):
     """

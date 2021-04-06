@@ -206,7 +206,7 @@ def _get_serve_tf_examples_fn(model, tf_transform_output):
     def serve_tf_examples_fn(serialized_tf_examples):
         """Returns the output to be used in the serving signature."""
         feature_spec = tf_transform_output.raw_feature_spec()
-        feature_spec.pop(features.LABEL_KEY)
+        feature_spec.pop("weight")  # features.LABEL_KEY
         parsed_features = tf.io.parse_example(serialized_tf_examples, feature_spec)
 
         transformed_features = model.tft_layer(parsed_features)
@@ -324,7 +324,7 @@ def run_fn(fn_args):
         validation_steps=eval_steps,  # TODO: this can be precomputed based on the data size
         callbacks=[tensorboard_callback],
     )
-    
+
     # Save and serve the model
     # signatures = {
     #     "serving_default": _get_serve_tf_examples_fn(
@@ -335,3 +335,5 @@ def run_fn(fn_args):
     # }
 
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})
+
+    raise(ValueError("Artificial Error: Attempting to rerun the model with cache ..."))

@@ -1,6 +1,8 @@
 """Node2Vec core algorithm."""
 from absl import logging
+from typing import Text, Optional, Union, Callable, List
 import numpy as np
+
 
 import tensorflow as tf
 from tensorflow.keras.layers import (
@@ -240,7 +242,34 @@ def generate_skipgram(S, vocab_size=10, window_size=4, negative_sample=0.0):
 
 
 class SkipGram(tf.keras.Model):
+    """
+    SkipGram model for Word2Vec.
+
+    Parameters
+    ----------
+    vocab_size : int
+        Size of the vocabulary.
+    embed_size : int
+        Embedding size.
+    num_neg_samples : int, optional
+        Number of negative samples, by default -1, which
+        does not take any negative samples.
+    """
+
     def __init__(self, vocab_size, embed_size, num_neg_samples=-1):
+        """
+        Construct a SkipGram model for Word2Vec.
+
+        Parameters
+        ----------
+        vocab_size : int
+            Size of the vocabulary.
+        embed_size : int
+            Embedding size.
+        num_neg_samples : int, optional
+            Number of negative samples, by default -1, which
+            does not take any negative samples.
+        """
         super(SkipGram, self).__init__()
         self.vocab_size = vocab_size
         self.embed_size = embed_size
@@ -269,10 +298,14 @@ class SkipGram(tf.keras.Model):
                 name="negative_sampling",
             )
             self.concat_samples = Concatenate(name="samples_concat")
-            self.dot = Dot(axes=2, name="weight_x_embed")
 
             # Sampled softmax dense layer
-            self.dense = Activation("softmax", name="sampled_softmax_dense")
+            self.dense = Lambda(
+                lambda x: K.softmax(
+                    (K.batch_dot(x[1], K.expand_dims(x[0], 2)) + x[2])[:, :, 0]
+                ),
+                name="sampled_softmax_dense",
+            )  # x = [embed_pool, softmax_w, softmax_b]
         else:
             self.dense = Dense(
                 vocab_size, activation="softmax", name="full_softmax_dense"
@@ -283,12 +316,12 @@ class SkipGram(tf.keras.Model):
         if self.num_neg_samples > 0:  # use sampled softmax
             target_word, context_word = input_data[0], input_data[1]
             if len(target_word.shape) < 2:  # make sure it's 2D
-                target_word = Reshape((1,))(target_word)
+                target_word = K.expand_dims(target_word, axis=1)
             if len(context_word.shape) < 2:  # make sure it's 2D
-                context_word = Reshape((1,))(context_word)
+                context_word = K.expand_dim(context_word, axis=1)
             # Get embeddings of the input
             embed = self.embeddings(context_word)
-            embed_pool = Reshape((1, self.embed_size))(embed)
+            embed_pool = self.pool_layer(embed)
             # Draw negative samples
             negatives = self.negatives(target_word)
             # Concatenate all the samples
@@ -299,11 +332,7 @@ class SkipGram(tf.keras.Model):
             # Activation for softmax
             # Using Embedding to save the parameters, and then
             # use matmul to make the sub-sampled Dense() layer
-            y_hat_no_bias = self.dot([embed_pool, softmax_w])
-            y_hat_no_bias = Reshape([-1, 1])(y_hat_no_bias)
-            y_hat = Add(name="prod_plus_bias")([y_hat_no_bias, softmax_b])
-            y_hat = Reshape((-1,), name="flatten")(y_hat)
-            y_hat = self.dense(y_hat)
+            y_hat = self.dense([embed_pool, softmax_w, softmax_b])
 
         else:  # use full softmax
             embed = self.embeddings(input_data)
@@ -313,6 +342,7 @@ class SkipGram(tf.keras.Model):
         return y_hat
 
     def model(self):
+        """Construct the model."""
         x = Input(shape=(1,), dtype="int64", name="target")
         if self.num_neg_samples > 0:
             y = Input(shape=(1,), dtype="int64", name="context")
@@ -322,12 +352,12 @@ class SkipGram(tf.keras.Model):
 
 
 def build_keras_model(
-    vocab_size,
-    embed_size,
-    num_neg_samples=-1,
-    loss="sparse_categorical_crossentropy",
-    optimizer="adam",
-    metrics=["accuracy"],
+    vocab_size: int,
+    embed_size: int,
+    num_neg_samples: Optional[int] = -1,
+    loss: Optional[Union[Text, Callable]] = "sparse_categorical_crossentropy",
+    optimizer: Optional[Union[Text, Callable]] = "adam",
+    metrics: Optional[Union[List, Callable]] = ["accuracy"],
 ):
     """
     Build keras model

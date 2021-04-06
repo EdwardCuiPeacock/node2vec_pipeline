@@ -1,8 +1,26 @@
 """Node2Vec core algorithm."""
+from absl import logging
+import numpy as np
+
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Dense, Embedding, Lambda
+from tensorflow.keras.layers import Input, Dense, Embedding, Lambda, Concatenate, Dot, Reshape, Add, Activation
+from tensorflow.keras.preprocessing.sequence import skipgrams
 import tensorflow.keras.backend as K
 from tensorflow.python.ops.linalg.sparse import sparse_csr_matrix_ops
+
+try:
+    from tensorflow.sparse import map_values
+except:
+    from tensorflow.python.framework import sparse_tensor
+    def map_values(op, *args):
+        """
+        Applies the `op` to the `.values` tensor of one or more `SparseTensor`s.
+        For tensorflow versions below 2.4. For versions above, use function
+        `tf.sparse.map_values`.
+        """
+        return sparse_tensor.SparseTensor(args[0].indices, 
+                                          op(*[a.values for a in args]),
+                                          args[0].dense_shape)
 
 
 def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
@@ -44,7 +62,7 @@ def sample_from_sparse(W_sample):
 
     # uniform_sample = tf.random.uniform((num_nodes, 1), minval=0, maxval=1)
     cdf = tf.map_fn(
-        lambda x: tf.sparse.map_values(
+        lambda x: map_values(
             lambda y: tf.cumsum(y) - tf.random.uniform((1,), minval=0, maxval=1), x
         ),
         W_sample,
@@ -100,24 +118,19 @@ def random_walk_sampling_step_tf(W: tf.SparseTensor, s0: tf.Tensor, s1: tf.Tenso
     num_nodes = W.shape[0]
 
     # alpha_1 / P
-    P = tf.sparse.SparseTensor(
-        tf.cast(
-            tf.stack([tf.range(num_nodes, dtype="int64"), s0], axis=1), dtype="int64"
-        ),
-        tf.ones(num_nodes),
-        dense_shape=(num_nodes, num_nodes),
-    )
+    P = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s0], axis=1), dtype="int64"), 
+                               tf.ones(num_nodes), 
+                               dense_shape=(num_nodes, num_nodes))
+    
     # alpha_2 / R
-    A_0 = tf.cast(tf.sparse.map_values(tf.ones_like, W), "float32")
+    A_0 = tf.sparse.SparseTensor(W.indices, tf.ones(W.indices.shape[0], dtype="float32"), dense_shape=W.shape)
     A_i_1 = tf_sparse_multiply(P, A_0)
 
-    I = tf.sparse.SparseTensor(
-        tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"),
-        tf.ones(num_nodes),
-        dense_shape=(num_nodes, num_nodes),
-    )  # permutation matrix
+    I = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"), 
+                               tf.ones(num_nodes), 
+                               dense_shape=(num_nodes, num_nodes)) # permutation matrix
     A_i = tf_sparse_multiply(I, A_0)
-
+    
     ## intersection
     R = tf.sparse.minimum(A_i_1, A_i)
     is_nonzero = tf.not_equal(R.values, 0)
@@ -130,123 +143,112 @@ def random_walk_sampling_step_tf(W: tf.SparseTensor, s0: tf.Tensor, s1: tf.Tenso
     Q = tf.sparse.retain(Q, is_nonzero)
 
     # Combine to get the final weight
-    W_sample = tf.sparse.add(P.__mul__(tf.constant([1 / p], dtype="float32")), R)
-    W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1 / q], dtype="float32")))
+    W_sample = tf.sparse.add(P.__mul__(tf.constant([1/p], dtype="float32")), R)
+    W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1/q], dtype="float32")))
     is_nonzero = tf.not_equal(W_sample.values, 0)
     W_sample = tf.sparse.retain(W_sample, is_nonzero)
+    W_sample = tf.sparse.reorder(W_sample)
 
     # Make sure the orders of indices are the same
-    W_sample = tf.sparse.reorder(W_sample)
     W_new = tf_sparse_multiply(I, tf.cast(tf.sparse.reorder(W), dtype="float32"))
     W_new = tf.sparse.reorder(W_new)
 
     # Multiply the weights by creating a new sparse matrix
-    W_sample = tf.sparse.map_values(tf.multiply, W_sample, W_new)
-
+    W_sample = tf.sparse.SparseTensor(W_sample.indices, tf.multiply(W_sample.values, W_new.values), 
+                                      dense_shape=W_sample.shape)
+    
     # Taking samples from the sparse matrix
     W_sample, cdf, cdf_sample, s_next = sample_from_sparse(W_sample)
-
+    
     return W_sample, cdf, cdf_sample, s_next
 
 
-def sample_1_iteration(W, p, q, walk_length=80):
+def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True):
     W = tf.cast(W, "float32")
+    if symmetrify:
+        W = tf.sparse.maximum(W, tf.sparse.transpose(W))
+    else:
+        # Make sure each row has at least 1 entry. The case where
+        # a row does not have a weight could happen when this is a
+        # directed graph (A -> B but not B -> A). In this case, 
+        # we set the weight to itself as 1.
+        indices = tf.sparse.to_dense(tf.sets.difference([tf.range(W.shape[0], dtype="int64")], [tf.unique(W.indices[:, 0]).y]))
+        indices = tf.transpose(tf.concat([indices, indices], axis=0))
+        terms = tf.sparse.SparseTensor(indices, tf.ones(indices.shape[0]), dense_shape=(10, 10))
+        W = tf.sparse.add(W, terms)
+    W = tf.sparse.reorder(W) # make sure the indices are sorted
 
     # First step
     s0 = tf.range(W.shape[0], dtype="int64")
-    _, _, _, s1 = sample_from_sparse(W)
+    W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse(W)
     S = [s0, s1]
-
+   
     for _ in range(walk_length - 1):
         _, _, _, s_next = random_walk_sampling_step_tf(W, S[-2], S[-1], p, q)
         S.append(s_next)
+    
+    for ii, ss in enumerate(S):
+        logging.info(f"s{ii}: {ss}")
+        
         
     return S
 
 
+
+def generate_skipgram(S, vocab_size=10, window_size=4, negative_sample=0.0):
+    pairs_mat, labels_arr = [], []
+    for s in S: # each row
+        pairs, labels = skipgrams(s, vocabulary_size=10, window_size=2, negative_samples=0)
+        pairs_mat.append(tf.convert_to_tensor(pairs))
+        labels_arr.append(tf.convert_to_tensor(labels))
+        
+    pairs_mat = tf.concat(pairs_mat, axis=0)
+    labels_arr = tf.concat(labels_arr, axis=0)
+    
+    # Target, context, label
+    return pairs_mat[:, 0], pairs_mat[:, 1], labels_arr
+        
+
 class SkipGram(tf.keras.Model):
-    """
-    SkipGram model for Word2Vec.
-
-    Parameters
-    ----------
-    vocab_size : int
-        Size of the vocabulary.
-    embed_size : int
-        Embedding size.
-    num_samples : int, optional
-        Number of negative samples, by default -1, which
-        does not take any negative samples.
-    """
-
-    def __init__(self, vocab_size, embed_size, num_samples=-1):
-        """
-        Construct a SkipGram model for Word2Vec.
-
-        Parameters
-        ----------
-        vocab_size : int
-            Size of the vocabulary.
-        embed_size : int
-            Embedding size.
-        num_samples : int, optional
-            Number of negative samples, by default -1, which
-            does not take any negative samples.
-        """
+    def __init__(self, vocab_size, embed_size, num_neg_samples=-1):
         super(SkipGram, self).__init__()
         self.vocab_size = vocab_size
         self.embed_size = embed_size
-        self.num_samples = num_samples
-
-        self.embeddings = Embedding(
-            input_dim=vocab_size, output_dim=embed_size, name="Embedding"
-        )
-        self.pool_layer = Lambda(lambda x: K.sum(x, axis=1), name="AvgPool")
-
-        if num_samples > 0:
-            self.softmax_weights = Embedding(
-                input_dim=vocab_size, output_dim=embed_size, name="softmax_weight"
-            )
-            self.softmax_biases = Embedding(
-                input_dim=vocab_size, output_dim=1, name="softmax_bias"
-            )
-
-            self.negatives = Lambda(
-                lambda x: K.random_uniform(
-                    (K.shape(x)[0], num_samples),
-                    minval=0,
-                    maxval=vocab_size,
-                    dtype="int32",
-                ),
-                name="negative_sampling",
-            )
-            self.concat_samples = Lambda(
-                lambda x: K.concatenate(x), name="samples_concat"
-            )
-
+        self.num_neg_samples = num_neg_samples
+        
+        self.embeddings = Embedding(input_dim=vocab_size, 
+                                    output_dim=embed_size,
+                                    name="Embedding")
+        self.pool_layer = Lambda(lambda x: K.sum(x, axis=1), name="AvgPool")        
+        
+        if num_neg_samples > 0:
+            self.softmax_weights = Embedding(input_dim=vocab_size, output_dim=embed_size, name='softmax_weight')
+            self.softmax_biases = Embedding(input_dim=vocab_size, output_dim=1, name='softmax_bias')
+            
+            self.negatives = Lambda(lambda x: K.random_uniform((K.shape(x)[0], num_neg_samples), 
+                                                               minval=tf.cast(0, "int64"), 
+                                                               maxval=tf.cast(vocab_size,"int64"),
+                                                               dtype='int64'),
+                                    name="negative_sampling")
+            self.concat_samples = Concatenate(name="samples_concat")
+            self.dot = Dot(axes=2, name="weight_x_embed")
+            
             # Sampled softmax dense layer
-            self.dense = Lambda(
-                lambda x: K.softmax(
-                    (K.batch_dot(x[1], K.expand_dims(x[0], 2)) + x[2])[:, :, 0]
-                ),
-                name="sampled_softmax_dense",
-            )
+            self.dense = Activation("softmax", name="sampled_softmax_dense")
         else:
-            self.dense = Dense(
-                vocab_size, activation="softmax", name="full_softmax_dense"
-            )
-
+            self.dense = Dense(vocab_size, activation="softmax", name="full_softmax_dense")
+            
     def call(self, input_data):
         """Model call."""
-        if self.num_samples > 0:  # use sampled softmax
+        if self.num_neg_samples > 0: # use sampled softmax
             target_word, context_word = input_data[0], input_data[1]
-            if len(target_word.shape) < 2:  # make sure it's 2D
-                target_word = K.expand_dims(target_word, axis=1)
-            if len(context_word.shape) < 2:  # make sure it's 2D
-                context_word = K.expand_dim(context_word, axis=1)
+            if len(target_word.shape) < 2: # make sure it's 2D
+                target_word = Reshape((1,))(target_word)
+            if len(context_word.shape) < 2: # make sure it's 2D
+                context_word = Reshape((1,))(context_word)
             # Get embeddings of the input
             embed = self.embeddings(context_word)
-            embed_pool = self.pool_layer(embed)
+            embed_pool = Reshape((1, self.embed_size))(embed)
             # Draw negative samples
             negatives = self.negatives(target_word)
             # Concatenate all the samples
@@ -257,20 +259,67 @@ class SkipGram(tf.keras.Model):
             # Activation for softmax
             # Using Embedding to save the parameters, and then
             # use matmul to make the sub-sampled Dense() layer
-            y_hat = self.dense([embed_pool, softmax_w, softmax_b])
-
-        else:  # use full softmax
+            y_hat_no_bias = self.dot([embed_pool, softmax_w])
+            y_hat_no_bias = Reshape([-1, 1])(y_hat_no_bias)
+            y_hat = Add(name="prod_plus_bias")([y_hat_no_bias, softmax_b])
+            y_hat = Reshape((-1,), name="flatten")(y_hat)
+            y_hat = self.dense(y_hat)
+            
+        else: # use full softmax
             embed = self.embeddings(input_data)
-            embed_pool = self.pool_layer(embed)  # pooling
-            y_hat = self.dense(embed_pool)  # predicted class
-
+            embed_pool = self.pool_layer(embed) # pooling
+            y_hat = self.dense(embed_pool) # predicted class
+        
         return y_hat
-
+        
+    
     def model(self):
-        """Construct the model."""
-        x = Input(shape=(1,), dtype="int32", name="target")
-        if self.num_samples > 0:
-            y = Input(shape=(1,), dtype="int32", name="context")
+        x = Input(shape=(1,), dtype="int64", name="target")
+        if self.num_neg_samples > 0: 
+            y = Input(shape=(1,), dtype="int64", name="context")
             return tf.keras.Model(inputs=[x, y], outputs=self.call([x, y]))
         else:
             return tf.keras.Model(inputs=x, outputs=self.call(x))
+        
+        
+def build_keras_model(
+    vocab_size,
+    embed_size,
+    num_neg_samples=-1,
+    loss="sparse_categorical_crossentropy",
+    optimizer="adam",
+    metrics=["accuracy"],
+):
+    """
+    Build keras model
+
+    Parameters
+    ----------
+    vocab_size : int
+        Size of the vocabulary.
+    embed_size : int
+        Embedding size.
+    num_neg_samples : int, optional
+        Number of negative samples, by default -1, which
+        does not take any negative samples.
+    loss : str, keras.losses, optional
+        Loss function of training, by default "sparse_categorical_crossentropy"
+    optimizer : str, keras.optimizers, optional
+        Training optimizer, by default "adam"
+    metrics : list(str), optional
+        List of monitoring metrics, by default ["accuracy"]
+
+    Returns
+    -------
+        Returns the compiled keras model
+    """
+    skipgram = SkipGram(
+        vocab_size=vocab_size, 
+        embed_size=embed_size, 
+        num_neg_samples=num_neg_samples,
+    )
+    model = skipgram.model()
+    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+    logging.info(model.summary())
+
+    return model

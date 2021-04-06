@@ -9,11 +9,12 @@ from absl import logging
 import tensorflow as tf
 import tensorflow_transform as tft
 
-from models.node2vec.node2vec import (SkipGram, 
-                                      sample_1_iteration,
-                                      generate_skipgram, 
-                                      build_keras_model
-                                     )
+from models.node2vec.node2vec import (
+    SkipGram,
+    sample_1_iteration,
+    generate_skipgram,
+    build_keras_model,
+)
 
 from tfx_bsl.tfxio import dataset_options
 
@@ -21,22 +22,28 @@ from tfx_bsl.tfxio import dataset_options
 def tensor2tfrecord(S, data_uri="temp.tfrecord", compression_type="GZIP"):
     """Write a tensor to a single TFRecord file."""
     ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
-    writer = tf.data.experimental.TFRecordWriter(data_uri, compression_type=compression_type)
+    writer = tf.data.experimental.TFRecordWriter(
+        data_uri, compression_type=compression_type
+    )
     writer.write(ds)
 
 
-def record2dataset(data_uri="temp.tfrecord", compression_type="GZIP", decode_as=tf.int64):
+def record2dataset(
+    data_uri="temp.tfrecord", compression_type="GZIP", decode_as=tf.int64
+):
     """Read from a TFRecord file or a list of files."""
+
     def parse_tensor_f(x):
         xp = tf.io.parse_tensor(x, decode_as)
         xp.set_shape([None])
         return (xp[0], xp[1]), xp[2]
-    
-    dataset = tf.data.TFRecordDataset(data_uri, compression_type=compression_type
-                                      ).map(parse_tensor_f)
+
+    dataset = tf.data.TFRecordDataset(data_uri, compression_type=compression_type).map(
+        parse_tensor_f
+    )
     return dataset
-    
-    
+
+
 def _read_transformed_dataset(file_pattern, data_accessor, tf_transform_output):
     """
     Read data coming out of Transformation component.
@@ -49,7 +56,7 @@ def _read_transformed_dataset(file_pattern, data_accessor, tf_transform_output):
         DataAccessor for converting input to RecordBatch.
     tf_transform_output : tft.TFTransformOutput
         A TFTransformOutput.
-        
+
     Returns
     -------
     tf.Dataset (iterable)
@@ -62,7 +69,7 @@ def _read_transformed_dataset(file_pattern, data_accessor, tf_transform_output):
             num_epochs=1,
             shuffle=False,
             sloppy_ordering=True,
-            batch_size=int(1E5),
+            batch_size=int(1e5),
         ),
         tf_transform_output.transformed_metadata.schema,
     )
@@ -70,13 +77,21 @@ def _read_transformed_dataset(file_pattern, data_accessor, tf_transform_output):
 
 
 def _create_sampled_training_data(
-    file_pattern, storage_path, data_accessor, tf_transform_output, 
-    window_size, negative_sample,
-    p, q, walk_length, train_repetitions, eval_repetitions,
+    file_pattern,
+    storage_path,
+    data_accessor,
+    tf_transform_output,
+    window_size,
+    negative_sample,
+    p,
+    q,
+    walk_length,
+    train_repetitions,
+    eval_repetitions,
 ):
     """Sample from the graph and save the samples.
     file_pattern: list(str)
-        list of files (patterns) coming out of the Transform step, 
+        list of files (patterns) coming out of the Transform step,
         with pattern "{{ PIPELINE ROOT }}/Transform/transformed_examples/{{ run_id }}/[train:eval]/*.gz"
     storage_path: str
         Output directory of the graph samples
@@ -86,23 +101,31 @@ def _create_sampled_training_data(
         A TFTransformOutput.
     p, q, walk_length, repetitions: node2vec parameters
     """
-    dataset_iterable = _read_transformed_dataset(file_pattern, data_accessor, tf_transform_output)
+    dataset_iterable = _read_transformed_dataset(
+        file_pattern, data_accessor, tf_transform_output
+    )
     logging.info("Loaded dataset schema ...")
     logging.info(dataset_iterable)
     # Iterate over the batches and build the final dict
-    dataset = {"indices":[], "weight":[]}
+    dataset = {"indices": [], "weight": []}
     for batch_num, batch_data in enumerate(dataset_iterable):
-        dataset["indices"].append(tf.concat([batch_data["InSeasonSeries_Id"], batch_data["token"]], axis=1))
+        dataset["indices"].append(
+            tf.concat([batch_data["InSeasonSeries_Id"], batch_data["token"]], axis=1)
+        )
         dataset["weight"].append(batch_data["weight"])
     # Merge into a single tensor
     dataset = {k: tf.concat(v, axis=0) for k, v in dataset.items()}
-    dataset["weight"] = tf.reshape(dataset["weight"], shape=(-1, )) # flatten
+    dataset["weight"] = tf.reshape(dataset["weight"], shape=(-1,))  # flatten
     logging.info(dataset)
-    
+
     # Build the graph from the entire dataset
-    num_nodes = int(tf.shape(tf.unique(tf.reshape(dataset["indices"], shape=(-1, )))[0])[0])
-    W = tf.sparse.SparseTensor(dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes))
-    
+    num_nodes = int(
+        tf.shape(tf.unique(tf.reshape(dataset["indices"], shape=(-1,)))[0])[0]
+    )
+    W = tf.sparse.SparseTensor(
+        dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes)
+    )
+
     logging.info(f"Num nodes: {num_nodes}")
 
     train_data_uri_list = []
@@ -114,16 +137,17 @@ def _create_sampled_training_data(
 
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
-        targets, contexts, labels = generate_skipgram(S, num_nodes, window_size, negative_sample)
+        targets, contexts, labels = generate_skipgram(
+            S, num_nodes, window_size, negative_sample
+        )
         data_uri = os.path.join(storage_path, "train", f"graph_sample_{r:05}.tfrecord")
-        sample_out = tf.stack([tf.cast(xx, "int64") for xx in [targets, contexts, labels]], axis=1)
+        sample_out = tf.stack(
+            [tf.cast(xx, "int64") for xx in [targets, contexts, labels]], axis=1
+        )
         tensor2tfrecord(sample_out, data_uri=data_uri)
-        #tensors2tfrecord(filename=data_uri, targets=tf.cast(targets, "int64"), 
-        #                contexts=tf.cast(contexts, "int64"), 
-        #                labels=tf.cast(labels, "int64"))
         train_data_uri_list.append(data_uri)
         train_data_size += len(labels)
-    
+
     eval_data_uri_list = []
     eval_data_size = 0
     for r in range(eval_repetitions):
@@ -132,16 +156,17 @@ def _create_sampled_training_data(
 
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
-        targets, contexts, labels = generate_skipgram(S, num_nodes, window_size, negative_sample)
+        targets, contexts, labels = generate_skipgram(
+            S, num_nodes, window_size, negative_sample
+        )
         data_uri = os.path.join(storage_path, "eval", f"graph_sample_{r:05}.tfrecord")
-        sample_out = tf.stack([tf.cast(xx, "int64") for xx in [targets, contexts, labels]], axis=1)
+        sample_out = tf.stack(
+            [tf.cast(xx, "int64") for xx in [targets, contexts, labels]], axis=1
+        )
         tensor2tfrecord(sample_out, data_uri=data_uri)
-        #tensors2tfrecord(filename=data_uri, targets=tf.cast(targets, "int64"), 
-        #                contexts=tf.cast(contexts, "int64"), 
-        #                labels=tf.cast(labels, "int64"))
         eval_data_uri_list.append(data_uri)
         eval_data_size += len(labels)
-        
+
     logging.info(f"Successfully created graph sampled dataset {storage_path}")
     logging.info("train data")
     logging.info(train_data_uri_list)
@@ -150,17 +175,25 @@ def _create_sampled_training_data(
     logging.info(eval_data_uri_list)
     logging.info(f"eval data size: {eval_data_size}")
 
-    return train_data_uri_list, eval_data_uri_list, train_data_size, eval_data_size, num_nodes
+    return (
+        train_data_uri_list,
+        eval_data_uri_list,
+        train_data_size,
+        eval_data_size,
+        num_nodes,
+    )
 
 
 def _input_fn(data_uri_list, batch_size=128, num_epochs=5, shuffle=False):
     # Load the raw "sentences" data
     dataset = record2dataset(data_uri_list, decode_as=tf.int64)
     if shuffle:
-        dataset = dataset.shuffle(buffer_size=10000).batch(batch_size).repeat(num_epochs)
+        dataset = (
+            dataset.shuffle(buffer_size=10000).batch(batch_size).repeat(num_epochs)
+        )
     else:
         dataset = dataset.batch(batch_size).repeat(num_epochs)
-        
+
     return dataset
 
 
@@ -213,7 +246,7 @@ def run_fn(fn_args):
     fn_lists = str(fn_args.__dict__)
     logging.info(f"fn attributes {fn_lists}")
     logging.info(f"tansformed_oputput {fn_args.transform_output}")
-    
+
     # Get some parameters
     system_config = fn_args.custom_config["system_config"]
     model_config = fn_args.custom_config["model_config"]
@@ -223,17 +256,26 @@ def run_fn(fn_args):
     graph_sample_path = os.path.join(system_config["PIPELINE_ROOT"], "graph_samples")
     train_sample_path = os.path.join(graph_sample_path, "train")
     eval_sample_path = os.path.join(graph_sample_path, "eval")
-    train_data_uri_list, eval_data_uri_list, train_data_size, eval_data_size, num_nodes = _create_sampled_training_data(
-        fn_args.train_files, train_sample_path, 
-        fn_args.data_accessor, tf_transform_output,
-        model_config["window_size"], 
-        0.0, # not generating negative samples from the preprocessing; use softmax negative sampling
-        model_config["p"], model_config["q"], 
-        model_config["walk_length"], 
-        model_config["train_repetitions"], 
-        model_config["eval_repetitions"]
-        )
-    
+    (
+        train_data_uri_list,
+        eval_data_uri_list,
+        train_data_size,
+        eval_data_size,
+        num_nodes,
+    ) = _create_sampled_training_data(
+        fn_args.train_files,
+        train_sample_path,
+        fn_args.data_accessor,
+        tf_transform_output,
+        model_config["window_size"],
+        0.0,  # not generating negative samples from the preprocessing; use softmax negative sampling
+        model_config["p"],
+        model_config["q"],
+        model_config["walk_length"],
+        model_config["train_repetitions"],
+        model_config["eval_repetitions"],
+    )
+
     # TODO: Left off here Friday
     # Load the created dataset
     train_batch_size = model_config.get("train_batch_size", 128)
@@ -249,7 +291,7 @@ def run_fn(fn_args):
         num_epochs=1,
         shuffle=False,
     )
-    
+
     # Build the model
     mirrored_strategy = tf.distribute.MirroredStrategy()
     with mirrored_strategy.scope():
@@ -268,8 +310,12 @@ def run_fn(fn_args):
     )
 
     # Do the fitting
-    train_steps = train_data_size // train_batch_size + 1 * (train_data_size % train_batch_size > 0)
-    eval_steps = eval_data_size // eval_batch_size + 1 * (eval_data_size % eval_batch_size > 0)
+    train_steps = train_data_size // train_batch_size + 1 * (
+        train_data_size % train_batch_size > 0
+    )
+    eval_steps = eval_data_size // eval_batch_size + 1 * (
+        eval_data_size % eval_batch_size > 0
+    )
     model.fit(
         train_dataset,
         epochs=model_config.get("num_epochs", 30),
@@ -278,15 +324,14 @@ def run_fn(fn_args):
         validation_steps=eval_steps,  # TODO: this can be precomputed based on the data size
         callbacks=[tensorboard_callback],
     )
-    logging.info(f"tf version: {tf.__version__}")
-    logging.info(f"keras version: {tf.keras.__version__}")
+    
     # Save and serve the model
-    #signatures = {
+    # signatures = {
     #     "serving_default": _get_serve_tf_examples_fn(
     #         model, tf_transform_output
     #     ).get_concrete_function(
     #         tf.TensorSpec(shape=[None], dtype=tf.string, name="examples")
     #     ),
-    #}
-    
+    # }
+
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})

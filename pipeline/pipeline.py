@@ -69,15 +69,15 @@ def create_pipeline(
         query,
         field_dict={"GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"]},
     )
-    
+
     output_config = example_gen_pb2.Output(
         split_config=example_gen_pb2.SplitConfig(
-            splits=[ # Generate no splitting, as we need to load everything
-                example_gen_pb2.SplitConfig.Split(name='train', hash_buckets=1),
+            splits=[  # Generate no splitting, as we need to load everything
+                example_gen_pb2.SplitConfig.Split(name="train", hash_buckets=1),
             ],
         )
     )
-    
+
     example_gen = BigQueryExampleGen(query=query_str, output_config=output_config)
     components.append(example_gen)
 
@@ -141,11 +141,11 @@ def create_pipeline(
 
         # Lowercase and replace illegal characters in labels."""
         # See https://cloud.google.com/compute/docs/naming-resources.
-        #trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
+        # trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
         #    "tfx_{}_{}".format(
         #        re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower())[-63:], "experiment"
         #    ),
-        #)
+        # )
     logging.info("trainer arguments")
     logging.info(trainer_args)
 

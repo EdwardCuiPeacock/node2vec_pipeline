@@ -10,7 +10,6 @@ import tensorflow as tf
 import tensorflow_transform as tft
 
 from models.node2vec.node2vec import (
-    SkipGram,
     sample_1_iteration,
     generate_skipgram_beam,
     build_keras_model,
@@ -347,5 +346,6 @@ def run_fn(fn_args):
     # }
 
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})
+
+    raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))
     
-    raise(ValueError("Artificial Error: Attempting to rerun the model with cache ..."))

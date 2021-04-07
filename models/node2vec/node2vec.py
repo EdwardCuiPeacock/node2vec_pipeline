@@ -13,10 +13,6 @@ from tensorflow.keras.layers import (
     Embedding,
     Lambda,
     Concatenate,
-    Dot,
-    Reshape,
-    Add,
-    Activation,
 )
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.preprocessing.sequence import skipgrams
@@ -28,7 +24,6 @@ import tensorflow_transform as tft
 import tensorflow_transform.beam as tft_beam
 from tensorflow_transform.tf_metadata import dataset_metadata
 from tensorflow_transform.tf_metadata import schema_utils
-
 try:
     from tensorflow.sparse import map_values
 except:
@@ -43,6 +38,7 @@ except:
         return sparse_tensor.SparseTensor(
             args[0].indices, op(*[a.values for a in args]), args[0].dense_shape
         )
+
 
 # %% Core module for node2vec sampling
 def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
@@ -228,7 +224,7 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True):
         _, _, _, s_next = random_walk_sampling_step_tf(W, S[-2], S[-1], p, q)
         S.append(s_next)
 
-    for ii, ss in enumerate(S): # verbose print
+    for ii, ss in enumerate(S):  # verbose print
         logging.info(f"s{ii}: {ss}")
 
     return S
@@ -281,10 +277,14 @@ def make_preproc_func(vocabulary_size, window_size, negative_samples):
         """Preprocess input columns into transformed columns."""
         S = tf.stack(list(inputs.values()), axis=1)  # tf tensor
 
-        out = tf.map_fn(_tf_make_skipgrams, S, 
-                            fn_output_signature=tf.RaggedTensorSpec(shape=[None, 3], ragged_rank=0, 
-                                                                    dtype=tf.int64))
-            
+        out = tf.map_fn(
+            _tf_make_skipgrams,
+            S,
+            fn_output_signature=tf.RaggedTensorSpec(
+                shape=[None, 3], ragged_rank=0, dtype=tf.int64
+            ),
+        )
+
         out = out.to_tensor(default_value=-1)
         out = tf.reshape(out, (-1, 3))
         index = tf.reduce_all(tf.greater(out, -1), axis=1)
@@ -355,6 +355,7 @@ def generate_skipgram_beam(
     num_rows_saved = len(transformed_data)
 
     return saved_results, num_rows_saved
+
 
 # %% Skipgram keras model
 class SkipGram(tf.keras.Model):

@@ -20,32 +20,15 @@ from models.node2vec.node2vec import (
 from tfx_bsl.tfxio import dataset_options
 
 
-def tensor2tfrecord(S, data_uri="temp.tfrecord", compression_type="GZIP"):
-    """Write a tensor to a single TFRecord file."""
-    ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
-    writer = tf.data.experimental.TFRecordWriter(
-        data_uri, compression_type=compression_type
-    )
-    writer.write(ds)
-
-
-def record2dataset(
-    data_uri="temp.tfrecord", compression_type="GZIP", decode_as=tf.int64
+def _read_transformed_dataset(
+    file_pattern,
+    data_accessor,
+    tf_transform_output,
+    num_epochs=1,
+    shuffle=False,
+    sloppy_ordering=True,
+    batch_size=100000,
 ):
-    """Read from a TFRecord file or a list of files."""
-
-    def parse_tensor_f(x):
-        xp = tf.io.parse_tensor(x, decode_as)
-        xp.set_shape([None])
-        return (xp[0], xp[1]), xp[2]
-
-    dataset = tf.data.TFRecordDataset(data_uri, compression_type=compression_type).map(
-        parse_tensor_f
-    )
-    return dataset
-
-
-def _read_transformed_dataset(file_pattern, data_accessor, tf_transform_output):
     """
     Read data coming out of Transformation component.
 
@@ -67,10 +50,10 @@ def _read_transformed_dataset(file_pattern, data_accessor, tf_transform_output):
     return data_accessor.tf_dataset_factory(
         file_pattern,
         dataset_options.TensorFlowDatasetOptions(
-            num_epochs=1,
-            shuffle=False,
-            sloppy_ordering=True,
-            batch_size=int(1e5),
+            num_epochs=num_epochs,
+            shuffle=shuffle,
+            sloppy_ordering=sloppy_ordering,
+            batch_size=int(batch_size),
         ),
         tf_transform_output.transformed_metadata.schema,
     )
@@ -89,6 +72,7 @@ def _create_sampled_training_data(
     walk_length,
     train_repetitions,
     eval_repetitions,
+    temp_dir="/tmp",
 ):
     """Sample from the graph and save the samples.
     file_pattern: list(str)
@@ -101,6 +85,8 @@ def _create_sampled_training_data(
     tf_transform_output : tft.TFTransformOutput
         A TFTransformOutput.
     window_size, negative_samples, p, q, walk_length, repetitions: node2vec parameters
+    temp_dir: str
+        Temporary directory to store the intermediate results for beam
     """
     dataset_iterable = _read_transformed_dataset(
         file_pattern, data_accessor, tf_transform_output
@@ -109,7 +95,7 @@ def _create_sampled_training_data(
     logging.info(dataset_iterable)
     # Iterate over the batches and build the final dict
     dataset = {"indices": [], "weight": []}
-    for batch_num, batch_data in enumerate(dataset_iterable):
+    for batch_data in dataset_iterable:
         dataset["indices"].append(
             tf.concat([batch_data["InSeasonSeries_Id"], batch_data["token"]], axis=1)
         )
@@ -139,10 +125,14 @@ def _create_sampled_training_data(
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
         data_uri, num_rows_saved = generate_skipgram_beam(
-            S, num_nodes, window_size, negative_samples, 
-            save_path=os.path.join(storage_path, "train", f"graph_sample_{r:05}")
+            S,
+            num_nodes,
+            window_size,
+            negative_samples,
+            save_path=os.path.join(storage_path, "train", f"graph_sample_{r:05}"),
+            temp_dir=temp_dir,
         )
-        
+
         train_data_uri_list += data_uri
         train_data_size += num_rows_saved
 
@@ -155,12 +145,16 @@ def _create_sampled_training_data(
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
         data_uri, num_rows_saved = generate_skipgram_beam(
-            S, num_nodes, window_size, negative_samples, 
-            save_path=os.path.join(storage_path, "eval", f"graph_sample_{r:05}")
+            S,
+            num_nodes,
+            window_size,
+            negative_samples,
+            save_path=os.path.join(storage_path, "eval", f"graph_sample_{r:05}"),
+            temp_dir=temp_dir,
         )
-        
-        eval_data_uri_list.append(data_uri)
-        eval_data_size += len(labels)
+
+        eval_data_uri_list += data_uri
+        eval_data_size += num_rows_saved
 
     logging.info(f"Successfully created graph sampled dataset {storage_path}")
     logging.info("train data")
@@ -180,15 +174,29 @@ def _create_sampled_training_data(
 
 
 def _input_fn(data_uri_list, batch_size=128, num_epochs=5, shuffle=False):
-    # Load the raw "sentences" data
-    dataset = record2dataset(data_uri_list, decode_as=tf.int64)
-    if shuffle:
-        dataset = (
-            dataset.shuffle(buffer_size=10000).batch(batch_size).repeat(num_epochs)
-        )
-    else:
-        dataset = dataset.batch(batch_size).repeat(num_epochs)
+    """Returns:
+    A dataset that contains (features, indices) tuple where features is a
+    dictionary of Tensors, and indices is a single Tensor of label indices.
+    """
+    feature_spec = {
+        kk: tf.io.FixedLenFeature([], dtype=tf.int64)
+        for kk in ["target", "context", "label"]
+    }
 
+    dataset = tf.data.experimental.make_batched_features_dataset(
+        file_pattern=data_uri_list,
+        batch_size=batch_size,
+        num_epochs=num_epochs,
+        shuffle=shuffle,
+        features=feature_spec,
+        label_key="label",
+    )
+
+    def map_fn(x, y):
+        return (x["target"], x["context"]), y
+
+    # Return as (target, context), label
+    dataset = dataset.map(map_fn)
     return dataset
 
 
@@ -250,7 +258,7 @@ def run_fn(fn_args):
     # Create the dataset
     graph_sample_path = os.path.join(system_config["PIPELINE_ROOT"], "graph_samples")
     train_sample_path = os.path.join(graph_sample_path, "train")
-    eval_sample_path = os.path.join(graph_sample_path, "eval")
+    # Generate the samples
     (
         train_data_uri_list,
         eval_data_uri_list,
@@ -269,15 +277,16 @@ def run_fn(fn_args):
         model_config["walk_length"],
         model_config["train_repetitions"],
         model_config["eval_repetitions"],
+        system_config["DATAFLOW_BEAM_PIPELINE_ARGS"]["temp_location"],
     )
 
-    # TODO: Left off here Friday
     # Load the created dataset
     train_batch_size = model_config.get("train_batch_size", 128)
     train_dataset = _input_fn(
         train_data_uri_list,
         batch_size=train_batch_size,
         num_epochs=model_config.get("num_epochs", 10),
+        shuffle=True,
     )
     eval_batch_size = model_config.get("eval_batch_size") or train_batch_size
     eval_dataset = _input_fn(
@@ -303,7 +312,7 @@ def run_fn(fn_args):
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir=fn_args.model_run_dir, update_freq="batch"
     )
-    
+
     logging.info("See if GPU is available")
     logging.info(tf.config.list_physical_devices("GPU"))
 
@@ -321,7 +330,10 @@ def run_fn(fn_args):
         steps_per_epoch=train_steps,
         validation_data=eval_dataset,
         validation_steps=eval_steps,
-        callbacks=[tensorboard_callback, LossMetricsPrintCallback(epochs=num_epochs, metrics=["accuracy"])],
+        callbacks=[
+            tensorboard_callback,
+            LossMetricsPrintCallback(epochs=num_epochs, metrics=["accuracy"]),
+        ],
         verbose=0,
     )
 
@@ -336,4 +348,4 @@ def run_fn(fn_args):
 
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})
 
-    #raise(ValueError("Artificial Error: Attempting to rerun the model with cache ..."))
+    # raise(ValueError("Artificial Error: Attempting to rerun the model with cache ..."))

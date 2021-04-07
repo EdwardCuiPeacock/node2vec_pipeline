@@ -53,7 +53,7 @@ def create_pipeline(
     eval_args: trainer_pb2.EvalArgs,
     model_serve_dir: Text,
     metadata_connection_config: Optional[metadata_store_pb2.ConnectionConfig] = None,
-    beam_pipeline_args: Optional[Dict[Text: Any]] = None,
+    beam_pipeline_args: Optional[Dict[Text, Any]] = None,
     ai_platform_training_args: Optional[Dict[Text, Text]] = None,
     ai_platform_serving_args: Optional[Dict[Text, Any]] = None,
     enable_cache: Optional[bool] = False,
@@ -224,7 +224,7 @@ def create_pipeline(
         )
     pusher = Pusher(**pusher_args)  # pylint: disable=unused-variable
     # components.append(pusher)
-
+    
     # %%
     return pipeline.Pipeline(
         pipeline_name=pipeline_name,
@@ -232,5 +232,5 @@ def create_pipeline(
         components=components,
         enable_cache=enable_cache,
         metadata_connection_config=metadata_connection_config,
-        beam_pipeline_args=[f"--{key}={val}" for key, val in beam_pipeline_args] if beam_pipeline_args is not None else None,
+        beam_pipeline_args=([f"--{key}={val}" for key, val in beam_pipeline_args.items()] if beam_pipeline_args is not None else None)
     )

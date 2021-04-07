@@ -68,7 +68,7 @@ def run(metadata_file: Optional[Text] = None):
             eval_args=trainer_pb2.EvalArgs(splits=["train"], num_steps=50),
             model_serve_dir=system_config["MODEL_SERVE_DIR"],
             beam_pipeline_args=system_config["DATAFLOW_BEAM_PIPELINE_ARGS"],
-            # ai_platform_training_args=system_config["GCP_AI_PLATFORM_TRAINING_ARGS"],
+            ai_platform_training_args=system_config["GCP_AI_PLATFORM_TRAINING_ARGS"] if system_config["enable_gpc_ai_platform_training"] else None,
             # (Optional) Uncomment below to use Cloud AI Platform.
             # ai_platform_serving_args=system_config["GCP_AI_PLATFORM_SERVING_ARGS"],
             enable_cache=system_config["enable_cache"],

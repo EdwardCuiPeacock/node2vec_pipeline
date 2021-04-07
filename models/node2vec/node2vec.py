@@ -1,8 +1,10 @@
 """Node2Vec core algorithm."""
+
 from absl import logging
+import time
 from typing import Text, Optional, Union, Callable, List
 import numpy as np
-
+from tqdm import tqdm
 
 import tensorflow as tf
 from tensorflow.keras.layers import (
@@ -16,9 +18,15 @@ from tensorflow.keras.layers import (
     Add,
     Activation,
 )
+from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.preprocessing.sequence import skipgrams
 import tensorflow.keras.backend as K
 from tensorflow.python.ops.linalg.sparse import sparse_csr_matrix_ops
+
+import tensorflow_transform as tft
+import tensorflow_transform.beam as tft_beam
+from tensorflow_transform.tf_metadata import dataset_metadata
+from tensorflow_transform.tf_metadata import schema_utils
 
 try:
     from tensorflow.sparse import map_values
@@ -219,17 +227,17 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True):
         _, _, _, s_next = random_walk_sampling_step_tf(W, S[-2], S[-1], p, q)
         S.append(s_next)
 
-    for ii, ss in enumerate(S):
-        logging.info(f"s{ii}: {ss}")
+    # for ii, ss in enumerate(S): # verbose print
+    #    logging.info(f"s{ii}: {ss}")
 
     return S
 
 
-def generate_skipgram(S, vocab_size=10, window_size=4, negative_sample=0.0):
+def generate_skipgram_numpy(S, vocab_size=10, window_size=4, negative_samples=0.0):
     pairs_mat, labels_arr = [], []
-    for s in S:  # each row
+    for s in tqdm(S):  # each row
         pairs, labels = skipgrams(
-            s, vocabulary_size=10, window_size=2, negative_samples=0
+            s, vocabulary_size=vocab_size, window_size=window_size, negative_samples=negative_samples
         )
         pairs_mat.append(tf.convert_to_tensor(pairs))
         labels_arr.append(tf.convert_to_tensor(labels))
@@ -239,6 +247,100 @@ def generate_skipgram(S, vocab_size=10, window_size=4, negative_sample=0.0):
 
     # Target, context, label
     return pairs_mat[:, 0], pairs_mat[:, 1], labels_arr
+
+
+def make_preproc_func(vocabulary_size, window_size, negative_samples):
+    """Returns a preprocessing_fn to make skipgrams given the parameters."""
+    def _make_skipgrams(s):
+        """Numpy function to make skipgrams."""
+        pairs, labels = skipgrams(
+                s, vocabulary_size=vocabulary_size, window_size=window_size, negative_samples=0,
+            )
+        samples = np.concatenate([np.asarray(pairs), np.asarray(labels)[:, None]], axis=1)
+        return samples
+    
+    @tf.function
+    def _tf_make_skipgrams(s):
+        """tf nump / function wrapper."""
+        y = tf.numpy_function(_make_skipgrams, [s], tf.int64)
+        return y
+    
+    def _fn(inputs):
+        """Preprocess input columns into transformed columns."""
+        S = tf.stack(list(inputs.values()), axis=1) # tf tensor
+        
+        out = tf.map_fn(_tf_make_skipgrams, S)
+        out = tf.reshape(out, (-1, 3))
+        
+        output = {}
+        output["target"] = out[:, 0]
+        output["context"] = out[:, 1]
+        output["label"] = out[:, 2]
+
+        return output
+    
+    return _fn
+
+
+def generate_skipgram_beam(features, vocabulary_size=10, window_size=2, negative_samples=0., feature_names=None, save_path="temp"):
+    if feature_names is None:
+        feature_names = [f"f{i}" for i in range(features.shape[1])]
+    assert len(feature_names) == features.shape[1]
+    
+    # Convert to list of dict dataset
+    dataset = tf.data.Dataset.from_tensor_slices({f"s{i}": features[:, i] for i in range(features.shape[1])})
+    dataset_schema = dataset_metadata.DatasetMetadata(
+        schema_utils.schema_from_feature_spec({
+            f's{i}': tf.io.FixedLenFeature([], tf.int64)\
+            for i in range(features.shape[1])
+        }))
+    
+    # Make the preprocessing_fn
+    preprocessing_fn = make_preproc_func(vocabulary_size, window_size, negative_samples)
+    
+    # Run the beam pipeline
+    with tft_beam.Context(temp_dir=tempfile.mkdtemp()):
+        transformed_dataset, transform_fn = (  # pylint: disable=unused-variable
+            (dataset.as_numpy_iterator(), dataset_schema) 
+            | "Make Skipgrams " >> tft_beam.AnalyzeAndTransformDataset(preprocessing_fn)
+        )
+
+    # pylint: disable=unused-variable
+    transformed_data, transformed_metadata = transformed_dataset  
+    saved_results = (transformed_data
+        | "Write to TFRecord" >> beam.io.tfrecordio.WriteToTFRecord(
+            file_path_prefix=save_path, file_name_suffix=".tfrecords",
+            coder=tft.coders.example_proto_coder.ExampleProtoCoder(transformed_metadata.schema))
+        )
+    # print('\nRaw data:\n{}\n'.format(pprint.pformat(dataset)))
+    # print('Transformed data:\n{}'.format(pprint.pformat(transformed_data)))
+    # Return the list of paths of tfrecords
+    num_rows_saved = len(transformed_dataset)
+    
+    # Make the feature specs for loading later on
+    feature_spec ={kk: tf.io.FixedLenFeature([], dtype=tf.int64) for kk in ["target", "context", "label"]}
+    
+    return saved_results, feature_spec, num_rows_saved
+
+
+def tfrecord2dataset(file_pattern, feature_spec, label_key, batch_size=5, 
+                       num_epochs=2):
+    """Returns:
+        A dataset that contains (features, indices) tuple where features is a
+        dictionary of Tensors, and indices is a single Tensor of label indices.
+    """
+    dataset = tf.data.experimental.make_batched_features_dataset(
+      file_pattern=file_pattern,
+      batch_size=batch_size,
+      num_epochs=num_epochs,
+      features=feature_spec,
+      label_key=label_key)
+    #dataset = tf.data.TFRecord()
+    return dataset
+
+
+def skipgram_loader_map_fn(x, y):
+    return (x["target"], x["context"]), y
 
 
 class SkipGram(tf.keras.Model):
@@ -392,3 +494,42 @@ def build_keras_model(
     logging.info(model.summary())
 
     return model
+
+
+
+class LossMetricsPrintCallback(Callback):
+    """Print loss / metrics at epoch ends."""
+
+    def __init__(self, epochs, metrics=["accuracy"], verbose=0):
+        """Instantiate LossErrorPrintCallback object and initial attributes."""
+        super(LossMetricsPrintCallback, self).__init__()
+        self.epochs = epochs
+        self.metrics = metrics
+        self.verbose = verbose
+        self.start_time = 0
+
+    def on_epoch_begin(self, epoch, logs=None):
+        """Operations at the start of the epoch."""
+        # pylint: disable=unused-argument
+        self.start_time = time.time()  # epoch start time
+
+    def on_epoch_end(self, epoch, logs=None):
+        """Print metrics at epoch end."""
+        # pylint: disable=no-self-use
+        epoch_dur = time.time() - self.start_time  # sec
+        # Construct the string
+        out_string = [f"Epoch {epoch + 1}/{self.epochs}: {epoch_dur:.0f}s\t"]
+        iterated_fields = ["", "val_"] if "val_loss" in logs else [""]
+        for prefix in iterated_fields:
+            field = f"{prefix}loss"
+            value = logs[field]
+            out_string.append(
+                f"{field}: {value:.4f}"
+                )
+            for m in self.metrics:
+                field = f"{prefix}{m}"
+                value = logs[field]
+                out_string.append(f"{field}: {value:.4f}")
+        out_string = ",\t".join(out_string)
+        
+        logging.info(out_string)

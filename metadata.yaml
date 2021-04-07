@@ -43,28 +43,37 @@ system_configurations:
   DATAFLOW_BEAM_PIPELINE_ARGS:
     description: |
       Settings for beam pipeline. Needed for bigquery. 
-    type: array
-    value:
-      - "--project={{ GOOGLE_CLOUD_PROJECT }}"
-      - "--runner=DataflowRunner"
-      - "--temp_location={{ GCS_BUCKET_NAME }}/tmp"
-      - "--region={{ GOOGLE_CLOUD_REGION }}"
-      - "--disk_size_gb=50"
-      - "--machine_type=e2-standard-8"
-  GCP_AI_PLATFORM_TRAINING_ARGS:
-    description: GCP AI platform settings
     type: object
     value:
       project: "{{ GOOGLE_CLOUD_PROJECT }}"
-      region:  "{{ GOOGLE_CLOUD_REGION }}"
-      masterConfig: 
+      runner: "DataflowRunner"
+      temp_location: "{{ GCS_BUCKET_NAME }}/tmp"
+      region: "{{ GOOGLE_CLOUD_REGION }}"
+      disk_size_gb: 50
+      machine_type: e2-standard-8
+  GCP_AI_PLATFORM_TRAINING_ARGS:
+    description: GCP AI platform settings. For GPU usage, see guides at https://cloud.google.com/ai-platform/training/docs/using-gpus
+    type: object
+    value:
+      project: "{{ GOOGLE_CLOUD_PROJECT }}"
+      region:  us-east4
+      scaleTier: CUSTOM
+      masterType: n1-highmem-16
+      masterConfig:
         imageUri: "gcr.io/{{ GOOGLE_CLOUD_PROJECT }}/tfx-pipeline"
+        acceleratorConfig:
+          count: 1
+          type: NVIDIA_TESLA_P4
   KUBEFLOW_RUNNER:
     description: Kubeflow runner .py script to use
     type: string
     value: kubeflow_runner.py
   enable_cache:
     description: Whether or not to enable caching of execution results
+    type: boolean
+    value: True
+  enable_gpc_ai_platform_training:
+    description: Whether or not to enable GPU training with GCP AI Platform
     type: boolean
     value: False
   preprocessing_fn:

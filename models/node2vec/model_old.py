@@ -12,7 +12,7 @@ import tensorflow_transform as tft
 from models.node2vec.node2vec import (
     SkipGram,
     sample_1_iteration,
-    generate_skipgram_beam,
+    generate_skipgram_numpy,
     build_keras_model,
     LossMetricsPrintCallback,
 )
@@ -138,13 +138,16 @@ def _create_sampled_training_data(
 
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
-        data_uri, num_rows_saved = generate_skipgram_beam(
-            S, num_nodes, window_size, negative_samples, 
-            save_path=os.path.join(storage_path, "train", f"graph_sample_{r:05}")
+        targets, contexts, labels = generate_skipgram_numpy(
+            S, num_nodes, window_size, negative_samples
         )
-        
-        train_data_uri_list += data_uri
-        train_data_size += num_rows_saved
+        data_uri = os.path.join(storage_path, "train", f"graph_sample_{r:05}.tfrecord")
+        sample_out = tf.stack(
+            [tf.cast(xx, "int64") for xx in [targets, contexts, labels]], axis=1
+        )
+        tensor2tfrecord(sample_out, data_uri=data_uri)
+        train_data_uri_list.append(data_uri)
+        train_data_size += len(labels)
 
     eval_data_uri_list = []
     eval_data_size = 0
@@ -154,11 +157,14 @@ def _create_sampled_training_data(
 
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
-        data_uri, num_rows_saved = generate_skipgram_beam(
-            S, num_nodes, window_size, negative_samples, 
-            save_path=os.path.join(storage_path, "eval", f"graph_sample_{r:05}")
+        targets, contexts, labels = generate_skipgram(
+            S, num_nodes, window_size, negative_samples
         )
-        
+        data_uri = os.path.join(storage_path, "eval", f"graph_sample_{r:05}.tfrecord")
+        sample_out = tf.stack(
+            [tf.cast(xx, "int64") for xx in [targets, contexts, labels]], axis=1
+        )
+        tensor2tfrecord(sample_out, data_uri=data_uri)
         eval_data_uri_list.append(data_uri)
         eval_data_size += len(labels)
 

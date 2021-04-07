@@ -228,8 +228,8 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True):
         _, _, _, s_next = random_walk_sampling_step_tf(W, S[-2], S[-1], p, q)
         S.append(s_next)
 
-    # for ii, ss in enumerate(S): # verbose print
-    #    logging.info(f"s{ii}: {ss}")
+    for ii, ss in enumerate(S): # verbose print
+        logging.info(f"s{ii}: {ss}")
 
     return S
 
@@ -281,8 +281,14 @@ def make_preproc_func(vocabulary_size, window_size, negative_samples):
         """Preprocess input columns into transformed columns."""
         S = tf.stack(list(inputs.values()), axis=1)  # tf tensor
 
-        out = tf.map_fn(_tf_make_skipgrams, S)
+        out = tf.map_fn(_tf_make_skipgrams, S, 
+                            fn_output_signature=tf.RaggedTensorSpec(shape=[None, 3], ragged_rank=0, 
+                                                                    dtype=tf.int64))
+            
+        out = out.to_tensor(default_value=-1)
         out = tf.reshape(out, (-1, 3))
+        index = tf.reduce_all(tf.greater(out, -1), axis=1)
+        out = tf.boolean_mask(out, index, axis=0)
 
         output = {}
         output["target"] = out[:, 0]
@@ -346,7 +352,7 @@ def generate_skipgram_beam(
     # print('\nRaw data:\n{}\n'.format(pprint.pformat(dataset)))
     # print('Transformed data:\n{}'.format(pprint.pformat(transformed_data)))
     # Return the list of paths of tfrecords
-    num_rows_saved = len(transformed_dataset)
+    num_rows_saved = len(transformed_data)
 
     return saved_results, num_rows_saved
 

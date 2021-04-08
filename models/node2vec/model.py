@@ -143,7 +143,9 @@ def _create_sampled_training_data(
     eval_data_size = 0
     for r in range(eval_repetitions):
         # Take the sample
-        cur_seed = (seed + (train_repetitions + r) * walk_length) if seed is not None else None
+        cur_seed = (
+            (seed + (train_repetitions + r) * walk_length) if seed is not None else None
+        )
         S = sample_1_iteration(W, p, q, walk_length, seed=cur_seed)
 
         # Write the tensor to a TFRecord file
@@ -350,4 +352,3 @@ def run_fn(fn_args):
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})
 
     raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))
-    

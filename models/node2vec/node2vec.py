@@ -24,6 +24,7 @@ import tensorflow_transform as tft
 import tensorflow_transform.beam as tft_beam
 from tensorflow_transform.tf_metadata import dataset_metadata
 from tensorflow_transform.tf_metadata import schema_utils
+
 try:
     from tensorflow.sparse import map_values
 except:
@@ -81,7 +82,9 @@ def sample_from_sparse(W_sample, seed=None):
     # uniform_sample = tf.random.uniform((num_nodes, 1), minval=0, maxval=1)
     cdf = tf.map_fn(
         lambda x: map_values(
-            lambda y: tf.cumsum(y) - tf.random.uniform((1,), minval=0, maxval=1, seed=seed), x
+            lambda y: tf.cumsum(y)
+            - tf.random.uniform((1,), minval=0, maxval=1, seed=seed),
+            x,
         ),
         W_sample,
     )  # map to each row
@@ -103,7 +106,12 @@ def sample_from_sparse(W_sample, seed=None):
 
 
 def random_walk_sampling_step_tf(
-    W: tf.SparseTensor, s0: tf.Tensor, s1: tf.Tensor, p: float, q: float, seed: int = None
+    W: tf.SparseTensor,
+    s0: tf.Tensor,
+    s1: tf.Tensor,
+    p: float,
+    q: float,
+    seed: int = None,
 ):
     """
     Perform a 1-step sample of random walk.
@@ -223,7 +231,9 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
     S = [s0, s1]
 
     for i in range(walk_length - 1):
-        _, _, _, s_next = random_walk_sampling_step_tf(W, S[-2], S[-1], p, q, seed=seed+i if seed is not None else None)
+        _, _, _, s_next = random_walk_sampling_step_tf(
+            W, S[-2], S[-1], p, q, seed=seed + i if seed is not None else None
+        )
         S.append(s_next)
 
     # for ii, ss in enumerate(S):  # verbose print
@@ -233,7 +243,9 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
 
 
 # %% Numpy procedure to generate skipgrams
-def generate_skipgram_numpy(S, vocab_size=10, window_size=4, negative_samples=0.0, seed=None, shuffle=True):
+def generate_skipgram_numpy(
+    S, vocab_size=10, window_size=4, negative_samples=0.0, seed=None, shuffle=True
+):
     pairs_mat, labels_arr = [], []
     for s in tqdm(S):  # each row
         pairs, labels = skipgrams(
@@ -255,7 +267,9 @@ def generate_skipgram_numpy(S, vocab_size=10, window_size=4, negative_samples=0.
 
 
 # %% Generate skipgram with beam pipeline
-def make_preproc_func(vocabulary_size, window_size, negative_samples, shuffle=True, seed=None):
+def make_preproc_func(
+    vocabulary_size, window_size, negative_samples, shuffle=True, seed=None
+):
     """Returns a preprocessing_fn to make skipgrams given the parameters."""
 
     def _make_skipgrams(s):
@@ -335,7 +349,9 @@ def generate_skipgram_beam(
     )
 
     # Make the preprocessing_fn
-    preprocessing_fn = make_preproc_func(vocabulary_size, window_size, negative_samples, shuffle, seed)
+    preprocessing_fn = make_preproc_func(
+        vocabulary_size, window_size, negative_samples, shuffle, seed
+    )
 
     # Run the beam pipeline
     with tft_beam.Context(temp_dir=temp_dir):

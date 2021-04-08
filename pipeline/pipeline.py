@@ -68,7 +68,10 @@ def create_pipeline(
     # ExampleGen: Load the graph data from bigquery
     query_str = load_query_string(
         query,
-        field_dict={"GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"], "DEBUG_SETTINGS": model_config["query_debug_settings"]},
+        field_dict={
+            "GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"],
+            "DEBUG_SETTINGS": model_config["query_debug_settings"],
+        },
     )
 
     output_config = example_gen_pb2.Output(
@@ -143,12 +146,14 @@ def create_pipeline(
         # Lowercase and replace illegal characters in labels.
         # This is the job ID that will be shown in the platform
         # See https://cloud.google.com/compute/docs/naming-resources.
-        trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
-           "tfx_{}_{}".format(
-               re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower()),
-               datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-           )[-63:]
-        )
+        trainer_args["custom_config"][
+            ai_platform_trainer_executor.JOB_ID_KEY
+        ] = "tfx_{}_{}".format(
+            re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower()),
+            datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+        )[
+            -63:
+        ]
     logging.info("trainer arguments")
     logging.info(trainer_args)
 
@@ -227,7 +232,7 @@ def create_pipeline(
         )
     pusher = Pusher(**pusher_args)  # pylint: disable=unused-variable
     # components.append(pusher)
-    
+
     # %%
     return pipeline.Pipeline(
         pipeline_name=pipeline_name,
@@ -235,5 +240,9 @@ def create_pipeline(
         components=components,
         enable_cache=enable_cache,
         metadata_connection_config=metadata_connection_config,
-        beam_pipeline_args=([f"--{key}={val}" for key, val in beam_pipeline_args.items()] if beam_pipeline_args is not None else None)
+        beam_pipeline_args=(
+            [f"--{key}={val}" for key, val in beam_pipeline_args.items()]
+            if beam_pipeline_args is not None
+            else None
+        ),
     )

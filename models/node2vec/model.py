@@ -6,6 +6,9 @@ from __future__ import print_function
 import os
 from absl import logging
 
+import pandas as pd
+import numpy as np
+
 import tensorflow as tf
 import tensorflow_transform as tft
 
@@ -119,11 +122,21 @@ def _create_sampled_training_data(
     logging.info(dataset_iterable)
     # Iterate over the batches and build the final dict
     dataset = {"indices": [], "weight": []}
+    pandas_data = {"InSeasonSeries_Id":[], "token":[], "weight":[]}
     for batch_data in dataset_iterable:
         dataset["indices"].append(
             tf.concat([batch_data["InSeasonSeries_Id"], batch_data["token"]], axis=1)
         )
         dataset["weight"].append(batch_data["weight"])
+
+        pandas_data["InSeasonSeries_Id"].append(batch_data["InSeasonSeries_Id"].numpy())
+        pandas_data["token"].append(batch_data["token"].numpy())
+        pandas_data["weight"].append(batch_data["weight"].numpy())
+
+    pandas_data = pd.DataFrame({k: np.concatenate(v, axis=0) for k, v in pandas_data.items()})
+    pandas_data.to_csv(os.path.join(temp_dir, "transformed_csv_data.csv"))
+    logging.info(f"Saved pandas dataframe at {temp_dir}")
+
     # Merge into a single tensor
     dataset = {k: tf.concat(v, axis=0) for k, v in dataset.items()}
     dataset["weight"] = tf.reshape(dataset["weight"], shape=(-1,))  # flatten

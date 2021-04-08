@@ -10,7 +10,7 @@ tfx_metadata
 __pycache__/
 
 # IPython checkpoints
-.ipynb_checkpoints/
+**/.ipynb_checkpoints/
 
 # editor meta files
 .vscode/

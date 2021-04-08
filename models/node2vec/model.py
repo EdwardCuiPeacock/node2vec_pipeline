@@ -255,8 +255,7 @@ def run_fn(fn_args):
     tf_transform_output = tft.TFTransformOutput(fn_args.transform_output)
 
     # Create the dataset
-    graph_sample_path = os.path.join(system_config["PIPELINE_ROOT"], "graph_samples")
-    train_sample_path = os.path.join(graph_sample_path, "train")
+    graph_sample_path = fn_args.model_run_dir.replace("model_run", "graph_samples")
     # Generate the samples
     (
         train_data_uri_list,
@@ -266,7 +265,7 @@ def run_fn(fn_args):
         num_nodes,
     ) = _create_sampled_training_data(
         fn_args.train_files,
-        train_sample_path,
+        graph_sample_path,
         fn_args.data_accessor,
         tf_transform_output,
         model_config["window_size"],

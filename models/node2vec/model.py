@@ -73,21 +73,44 @@ def _create_sampled_training_data(
     temp_dir="/tmp",
     seed=None,
 ):
-    """Sample from the graph and save the samples.
+    """
+    Sample from the graph and save the samples.
+
+    Parameters
+    ----------
     file_pattern: list(str)
         list of files (patterns) coming out of the Transform step,
         with pattern "{{ PIPELINE ROOT }}/Transform/transformed_examples/{{ run_id }}/[train:eval]/*.gz"
-    storage_path: str
+     storage_path: str
         Output directory of the graph samples
     data_accessor : tfx.components.trainer.fn_args_utils.DataAccessor
         DataAccessor for converting input to RecordBatch.
     tf_transform_output : tft.TFTransformOutput
         A TFTransformOutput.
-    window_size, negative_samples, p, q, walk_length, repetitions: node2vec parameters
-    temp_dir: str
+    window_size : int, optional
+        Window size of skipgram, by default 2
+    negative_samples : float, optional
+        Fraction of negative samples of skipgram, by default 0.0
+    p : float
+        node2vec Return Parameter
+    q : float
+        node2vec In-Out Parameter
+     walk_length : int, optional
+        Number of steps to take in the random walk,
+        by default 80
+    train_repetitions : int
+        Number of times to sample the graph to make training data
+    eval_repetitions : int
+        Number of times to sample the graph to make evaluation data
+    temp_dir: str, optional
         Temporary directory to store the intermediate results for beam
-    seed: int
+    seed: int, optional
         Starting seed of graph sample generation. The default is None.
+
+    Returns
+    -------
+    [type]
+        [description]
     """
     dataset_iterable = _read_transformed_dataset(
         file_pattern, data_accessor, tf_transform_output
@@ -181,9 +204,26 @@ def _create_sampled_training_data(
 
 
 def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=None):
-    """Returns:
-    A dataset that contains (features, indices) tuple where features is a
-    dictionary of Tensors, and indices is a single Tensor of label indices.
+    """
+    Create a dataset that contains ((target, context), label)
+
+    Parameters
+    ----------
+    data_uri_list : list(str)
+        List of data uris / path to the TFRecord files
+    batch_size : int, optional
+        Batch size of the sample, by default 128
+    num_epochs : int, optional
+        Number of epochs to train, by default 10
+    shuffle : bool, optional
+        Whether or not to shuffle, by default True
+    seed : int
+        Sampling seed. The default is None
+
+    Returns
+    -------
+    tf.data.Dataset
+        SkipGram training dataset of ((target, context), label)
     """
     feature_spec = {
         kk: tf.io.FixedLenFeature([], dtype=tf.int64)
@@ -192,9 +232,9 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
 
     dataset = tf.data.experimental.make_batched_features_dataset(
         file_pattern=data_uri_list,
-        batch_size=1, # do batching later
-        num_epochs=1, # do epoch repetitions later
-        shuffle=False, # do shuffling later
+        batch_size=1,  # do batching later
+        num_epochs=1,  # do epoch repetitions later
+        shuffle=False,  # do shuffling later
         features=feature_spec,
         label_key="label",
     )
@@ -205,7 +245,9 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     # Return as (target, context), label
     dataset = dataset.map(map_fn)
     if shuffle:
-        dataset = dataset.shuffle(buffer_size=10000, seed=seed, reshuffle_each_iteration=True)
+        dataset = dataset.shuffle(
+            buffer_size=10000, seed=seed, reshuffle_each_iteration=True
+        )
     dataset = dataset.batch(batch_size).repeat(num_epochs)
     return dataset
 
@@ -247,7 +289,7 @@ def run_fn(fn_args):
             DataAccessor for converting input to RecordBatch.
         - fn_args.model_run_dir: str
             Path to model running directory.
-        - fn_args.model_serve_dir: str
+        - fn_args.serving_model_dir: str
             Path to model serving directory.
         - fn_args.transform_output: str
             Transformed output uri
@@ -326,16 +368,16 @@ def run_fn(fn_args):
 
     logging.info("See if GPU is available")
     logging.info(tf.config.list_physical_devices("GPU"))
-    
+
     # Do the fitting
     train_steps = train_data_size // train_batch_size + 1 * (
-         train_data_size % train_batch_size > 0
+        train_data_size % train_batch_size > 0
     )
     eval_steps = eval_data_size // eval_batch_size + 1 * (
         eval_data_size % eval_batch_size > 0
     )
     logging.info(f"Train steps: {train_steps}, Eval steps: {eval_steps}")
-    
+
     model.fit(
         train_dataset,
         epochs=num_epochs,

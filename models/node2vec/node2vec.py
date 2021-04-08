@@ -205,6 +205,34 @@ def random_walk_sampling_step_tf(
 
 
 def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
+    """
+    Sample 1 full iteration of the random walk.
+
+    Parameters
+    ----------
+    W : tf.sparse.SparseTensor
+        Weighted adjacency matrix of the graph.
+    p : float
+        node2vec Return Parameter
+    q : float
+        node2vec In-Out Parameter
+    walk_length : int, optional
+        Number of steps to take in the random walk,
+        by default 80
+    symmetrify : bool, optional
+        Whether or not symmetrify the adjacency matrix, which
+        equivalent turns the graph into an undirected graph,
+        by default True
+    seed : int
+        Sampling seed. The default is None.
+
+    Returns
+    -------
+    tf.Tensor
+        A sample of the random walk of size (num_nodes, walk_length)
+        where num_nodes is the number of rows / col of the square
+        adjacency matrix W.
+    """
     W = tf.cast(W, "float32")
     if symmetrify:
         W = tf.sparse.maximum(W, tf.sparse.transpose(W))
@@ -246,6 +274,34 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
 def generate_skipgram_numpy(
     S, vocab_size=10, window_size=4, negative_samples=0.0, seed=None, shuffle=True
 ):
+    """
+    Generate SkipGrams, with numpy implementation.
+
+    Parameters
+    ----------
+    S : tf.Tensor
+        Features tensor, where each column is a feature.
+    vocabulary_size : int, optional
+        Size of skipgram vocabulary, by default 10
+    window_size : int, optional
+        Window size of skipgram, by default 2
+    negative_samples : float, optional
+        Fraction of negative samples of skipgram, by default 0.0
+    seed : int, optional
+        Random seed, by default None
+    shuffle : bool, optional
+        Whether or not to shuffle, by default True
+
+    Returns
+    -------
+    target: np.ndarray
+        Target word
+    context: np.ndarray
+        Context word
+    label: np.ndarray
+        Label 0/1 indicating whether this (target, context) pair
+        is a positive (1) or negative (0) example
+    """
     pairs_mat, labels_arr = [], []
     for s in tqdm(S):  # each row
         pairs, labels = skipgrams(
@@ -331,6 +387,42 @@ def generate_skipgram_beam(
     temp_dir="/tmp",
     save_path="temp",
 ):
+    """
+    Generate Skipgrams with an Apache Beam pipeline.
+
+    Parameters
+    ----------
+    features : tf.Tensor
+        Features tensor, where each column is a feature.
+    vocabulary_size : int, optional
+        Size of skipgram vocabulary, by default 10
+    window_size : int, optional
+        Window size of skipgram, by default 2
+    negative_samples : float, optional
+        Fraction of negative samples of skipgram, by default 0.0
+    shuffle : bool, optional
+        Whether or not to shuffle, by default True
+    seed : int, optional
+        Random seed, by default None
+    feature_names : list(str), optional
+        List of feature names, whose length must match the
+        number of columns of features. The default is None,
+        in which case the function makes up the feature names
+        as ["f0", "f1", ...]
+    temp_dir : str, optional
+        Directory to save temporary results used by the Beam
+        pipeline, by default "/tmp"
+    save_path : str, optional
+        Output path name (without the .tfrecord extention),
+        by default "temp"
+
+    Returns
+    -------
+    saved_results: list(str)
+        List of URIs / path to the TFRecord files.
+    num_rows_saved: int
+        Number of rows of the samples saved.
+    """
     if feature_names is None:
         feature_names = [f"f{i}" for i in range(features.shape[1])]
     assert len(feature_names) == features.shape[1]

@@ -83,4 +83,4 @@ SELECT InSeasonSeries_Id,
     SUM(token_count) AS token_count
 FROM intermediate_result
 GROUP BY InSeasonSeries_Id, token 
-{ { DEBUG_SETTINGS } }
+{{ DEBUG_SETTINGS }}

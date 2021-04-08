@@ -13,7 +13,6 @@ from models.node2vec.node2vec import (
     sample_1_iteration,
     generate_skipgram_beam,
     build_keras_model,
-    LossMetricsPrintCallback,
 )
 
 from tfx_bsl.tfxio import dataset_options
@@ -87,7 +86,7 @@ def _create_sampled_training_data(
     window_size, negative_samples, p, q, walk_length, repetitions: node2vec parameters
     temp_dir: str
         Temporary directory to store the intermediate results for beam
-    seeded: int
+    seed: int
         Starting seed of graph sample generation. The default is None.
     """
     dataset_iterable = _read_transformed_dataset(
@@ -123,7 +122,7 @@ def _create_sampled_training_data(
     for r in range(train_repetitions):
         # Take the sample
         cur_seed = (seed + r * walk_length) if seed is not None else None
-        S = sample_1_iteration(W, p, q, walk_length, cur_seed)
+        S = sample_1_iteration(W, p, q, walk_length, seed=cur_seed)
 
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
@@ -145,7 +144,7 @@ def _create_sampled_training_data(
     for r in range(eval_repetitions):
         # Take the sample
         cur_seed = (seed + (train_repetitions + r) * walk_length) if seed is not None else None
-        S = sample_1_iteration(W, p, q, walk_length, cur_seed)
+        S = sample_1_iteration(W, p, q, walk_length, seed=cur_seed)
 
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
@@ -335,11 +334,8 @@ def run_fn(fn_args):
         steps_per_epoch=train_steps,
         validation_data=eval_dataset,
         validation_steps=eval_steps,
-        callbacks=[
-            tensorboard_callback,
-            LossMetricsPrintCallback(epochs=num_epochs, metrics=["accuracy"]),
-        ],
-        verbose=0,
+        callbacks=[tensorboard_callback],
+        verbose=2,
     )
 
     # Save and serve the model

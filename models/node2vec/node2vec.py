@@ -226,8 +226,8 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
         _, _, _, s_next = random_walk_sampling_step_tf(W, S[-2], S[-1], p, q, seed=seed+i if seed is not None else None)
         S.append(s_next)
 
-    for ii, ss in enumerate(S):  # verbose print
-        logging.info(f"s{ii}: {ss}")
+    # for ii, ss in enumerate(S):  # verbose print
+    #     logging.info(f"s{ii}: {ss}")
 
     return S
 
@@ -517,39 +517,3 @@ def build_keras_model(
     logging.info(model.summary())
 
     return model
-
-
-class LossMetricsPrintCallback(Callback):
-    """Print loss / metrics at epoch ends."""
-
-    def __init__(self, epochs, metrics=["accuracy"], verbose=0):
-        """Instantiate LossErrorPrintCallback object and initial attributes."""
-        super(LossMetricsPrintCallback, self).__init__()
-        self.epochs = epochs
-        self.metrics = metrics
-        self.verbose = verbose
-        self.start_time = 0
-
-    def on_epoch_begin(self, epoch, logs=None):
-        """Operations at the start of the epoch."""
-        # pylint: disable=unused-argument
-        self.start_time = time.time()  # epoch start time
-
-    def on_epoch_end(self, epoch, logs=None):
-        """Print metrics at epoch end."""
-        # pylint: disable=no-self-use
-        epoch_dur = time.time() - self.start_time  # sec
-        # Construct the string
-        out_string = [f"Epoch {epoch + 1}/{self.epochs}: {epoch_dur:.0f}s\t"]
-        iterated_fields = ["", "val_"] if "val_loss" in logs else [""]
-        for prefix in iterated_fields:
-            field = f"{prefix}loss"
-            value = logs[field]
-            out_string.append(f"{field}: {value:.4f}")
-            for m in self.metrics:
-                field = f"{prefix}{m}"
-                value = logs[field]
-                out_string.append(f"{field}: {value:.4f}")
-        out_string = ",\t".join(out_string)
-
-        logging.info(out_string)

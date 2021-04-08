@@ -180,7 +180,7 @@ def _create_sampled_training_data(
     )
 
 
-def _input_fn(data_uri_list, batch_size=128, num_epochs=5, shuffle=False):
+def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=None):
     """Returns:
     A dataset that contains (features, indices) tuple where features is a
     dictionary of Tensors, and indices is a single Tensor of label indices.
@@ -192,9 +192,9 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=5, shuffle=False):
 
     dataset = tf.data.experimental.make_batched_features_dataset(
         file_pattern=data_uri_list,
-        batch_size=batch_size,
-        num_epochs=num_epochs,
-        shuffle=shuffle,
+        batch_size=1, # do batching later
+        num_epochs=1, # do epoch repetitions later
+        shuffle=False, # do shuffling later
         features=feature_spec,
         label_key="label",
     )
@@ -204,6 +204,9 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=5, shuffle=False):
 
     # Return as (target, context), label
     dataset = dataset.map(map_fn)
+    if shuffle:
+        dataset = dataset.shuffle(buffer_size=10000, seed=seed, reshuffle_each_iteration=True)
+    dataset = dataset.batch(batch_size).repeat(num_epochs)
     return dataset
 
 
@@ -261,6 +264,7 @@ def run_fn(fn_args):
     system_config = fn_args.custom_config["system_config"]
     model_config = fn_args.custom_config["model_config"]
     tf_transform_output = tft.TFTransformOutput(fn_args.transform_output)
+    num_epochs = model_config.get("num_epochs", 30)
 
     # Create the dataset
     graph_sample_path = fn_args.model_run_dir.replace("model_run", "graph_samples")
@@ -291,8 +295,9 @@ def run_fn(fn_args):
     train_dataset = _input_fn(
         train_data_uri_list,
         batch_size=train_batch_size,
-        num_epochs=model_config.get("num_epochs", 10),
+        num_epochs=num_epochs,
         shuffle=True,
+        seed=model_config["seed"],
     )
     eval_batch_size = model_config.get("eval_batch_size") or train_batch_size
     eval_dataset = _input_fn(
@@ -321,15 +326,16 @@ def run_fn(fn_args):
 
     logging.info("See if GPU is available")
     logging.info(tf.config.list_physical_devices("GPU"))
-
+    
     # Do the fitting
     train_steps = train_data_size // train_batch_size + 1 * (
-        train_data_size % train_batch_size > 0
+         train_data_size % train_batch_size > 0
     )
     eval_steps = eval_data_size // eval_batch_size + 1 * (
         eval_data_size % eval_batch_size > 0
     )
-    num_epochs = model_config.get("num_epochs", 30)
+    logging.info(f"Train steps: {train_steps}, Eval steps: {eval_steps}")
+    
     model.fit(
         train_dataset,
         epochs=num_epochs,

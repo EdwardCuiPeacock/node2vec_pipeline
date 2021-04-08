@@ -4,8 +4,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from absl import logging
 import re
+import datetime
+from absl import logging
 from typing import Any, Dict, List, Optional, Text
 
 import tensorflow_model_analysis as tfma
@@ -144,8 +145,9 @@ def create_pipeline(
         # See https://cloud.google.com/compute/docs/naming-resources.
         trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
            "tfx_{}_{}".format(
-               re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower())[-63:], "experiment"
-           )
+               re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower()),
+               datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+           )[-63:]
         )
     logging.info("trainer arguments")
     logging.info(trainer_args)

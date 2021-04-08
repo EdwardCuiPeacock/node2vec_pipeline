@@ -62,18 +62,25 @@ token_clean AS (
         CROSS JOIN UNNEST(tokens) token
     GROUP BY InSeasonSeries_Id,
         token
+),
+intermediate_result AS (
+    SELECT distinct InSeasonSeries_Id,
+        tags AS token,
+        1 AS token_count
+    FROM melted
+    UNION ALL
+    (
+        SELECT InSeasonSeries_Id,
+            token,
+            token_count
+        FROM token_clean t
+            LEFT OUTER JOIN `{{ GOOGLE_CLOUD_PROJECT }}.recsystem.stop_words_en_sp` stop ON stop.string_field_0 = t.token
+        WHERE stop.string_field_0 IS NULL
+    )
 )
-SELECT distinct InSeasonSeries_Id,
-    tags AS token,
-    1 AS token_count
-FROM melted
-UNION ALL
-(
-    SELECT InSeasonSeries_Id,
-        token,
-        token_count
-    FROM token_clean t
-        LEFT OUTER JOIN `{{ GOOGLE_CLOUD_PROJECT }}.recsystem.stop_words_en_sp` stop ON stop.string_field_0 = t.token
-    WHERE stop.string_field_0 IS NULL
-)
-{{ DEBUG_SETTINGS }}
+SELECT InSeasonSeries_Id,
+    token,
+    SUM(token_count) AS token_count
+FROM intermediate_result
+GROUP BY InSeasonSeries_Id, token 
+{ { DEBUG_SETTINGS } }

@@ -72,7 +72,7 @@ def _create_sampled_training_data(
     train_repetitions,
     eval_repetitions,
     temp_dir="/tmp",
-    seeded=True,
+    seed=None,
 ):
     """Sample from the graph and save the samples.
     file_pattern: list(str)
@@ -87,8 +87,8 @@ def _create_sampled_training_data(
     window_size, negative_samples, p, q, walk_length, repetitions: node2vec parameters
     temp_dir: str
         Temporary directory to store the intermediate results for beam
-    seeded: bool
-        Whether or not use seed when generating the samples. The default is True.
+    seeded: int
+        Starting seed of graph sample generation. The default is None.
     """
     dataset_iterable = _read_transformed_dataset(
         file_pattern, data_accessor, tf_transform_output
@@ -122,8 +122,8 @@ def _create_sampled_training_data(
     # Create the TFRecords for training data
     for r in range(train_repetitions):
         # Take the sample
-        seed = r * walk_length if seeded else None
-        S = sample_1_iteration(W, p, q, walk_length, seed)
+        cur_seed = (seed + r * walk_length) if seed is not None else None
+        S = sample_1_iteration(W, p, q, walk_length, cur_seed)
 
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
@@ -132,7 +132,7 @@ def _create_sampled_training_data(
             num_nodes,
             window_size,
             negative_samples,
-            seed=seed,
+            seed=cur_seed,
             save_path=os.path.join(storage_path, "train", f"graph_sample_{r:05}"),
             temp_dir=temp_dir,
         )
@@ -144,8 +144,8 @@ def _create_sampled_training_data(
     eval_data_size = 0
     for r in range(eval_repetitions):
         # Take the sample
-        seed = train_repetitions * walk_length + r * walk_length if seeded else None
-        S = sample_1_iteration(W, p, q, walk_length, seed)
+        cur_seed = (seed + (train_repetitions + r) * walk_length) if seed is not None else None
+        S = sample_1_iteration(W, p, q, walk_length, cur_seed)
 
         # Write the tensor to a TFRecord file
         S = tf.transpose(tf.stack(S, axis=0))
@@ -154,7 +154,7 @@ def _create_sampled_training_data(
             num_nodes,
             window_size,
             negative_samples,
-            seed=seed,
+            seed=cur_seed,
             save_path=os.path.join(storage_path, "eval", f"graph_sample_{r:05}"),
             temp_dir=temp_dir,
         )

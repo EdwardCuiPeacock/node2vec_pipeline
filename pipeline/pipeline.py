@@ -139,13 +139,14 @@ def create_pipeline(
             ai_platform_trainer_executor.TRAINING_ARGS_KEY
         ] = ai_platform_training_args
 
-        # Lowercase and replace illegal characters in labels."""
+        # Lowercase and replace illegal characters in labels.
+        # This is the job ID that will be shown in the platform
         # See https://cloud.google.com/compute/docs/naming-resources.
-        # trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
-        #    "tfx_{}_{}".format(
-        #        re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower())[-63:], "experiment"
-        #    ),
-        # )
+        trainer_args["custom_config"][ai_platform_trainer_executor.JOB_ID_KEY] = (
+           "tfx_{}_{}".format(
+               re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower())[-63:], "experiment"
+           )
+        )
     logging.info("trainer arguments")
     logging.info(trainer_args)
 

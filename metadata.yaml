@@ -1,6 +1,6 @@
 # This file sets up the environment variables of the job run
 pipeline_name: node2vec_sports_syn
-pipeline_version: "0_0_0" # must be in  this format
+pipeline_version: "0_1_0" # must be in  this format
 description: |
   This pipeline runs the node2vec model on TFX with tensorflow / Keras
   system_configuration: All fields are required for the pipeline to run properly
@@ -89,10 +89,14 @@ model_configurations:
     description: Path to BigQuery script, relative to the project directory
     type: string
     value: data/graph_data.sql
+  query_debug_settings:
+    description: BigQuery script debug settings, such as limit number of rows of data to return, etc.
+    type: string
+    value: ""
   num_epochs: 
     description: Number of training epochs
     type: integer
-    value: 10
+    value: 30
   train_batch_size: 
     description: Batch size of training
     type: integer
@@ -101,10 +105,6 @@ model_configurations:
     description: Batch size of evaluation. If null, use training batch size
     type: integer
     value: null
-  eval_accuracy_threshold:
-    description: Evaluation accuracy threshold
-    type: float
-    value: 0.6
   embed_size: 
     description: Embedding size of the nodes
     type: integer
@@ -112,15 +112,15 @@ model_configurations:
   num_neg_samples:
     description: Number of negative samples to take for subsample softmax training
     type: integer
-    value: 17
+    value: 15
   walk_length:
     description: node2vec graph traversal walk length
     type: integer
-    value: 3
+    value: 30
   train_repetitions:
     description: node2vec graph traversal repetitions for training dataset
     type: integer
-    value: 5
+    value: 6
   eval_repetitions:
     description: node2vec graph traversal repetitions for evaluation dataset
     type: integer
@@ -128,12 +128,12 @@ model_configurations:
   p:
     description: node2vec Return parameter
     type: float
-    value: 0.2
+    value: 1.0
   q:
     description: node2vec In-Out parameters
     type: float
-    value: 0.8
+    value: 1.0
   window_size:
     description: word2vec window size
     type: int
-    value: 2
+    value: 8

@@ -68,7 +68,7 @@ def create_pipeline(
     # ExampleGen: Load the graph data from bigquery
     query_str = load_query_string(
         query,
-        field_dict={"GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"]},
+        field_dict={"GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"], "DEBUG_SETTINGS": model_config["query_debug_settings"]},
     )
 
     output_config = example_gen_pb2.Output(

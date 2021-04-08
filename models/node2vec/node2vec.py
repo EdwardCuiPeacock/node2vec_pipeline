@@ -260,7 +260,7 @@ def make_preproc_func(vocabulary_size, window_size, negative_samples):
             s,
             vocabulary_size=vocabulary_size,
             window_size=window_size,
-            negative_samples=0,
+            negative_samples=negative_samples,
         )
         samples = np.concatenate(
             [np.asarray(pairs), np.asarray(labels)[:, None]], axis=1

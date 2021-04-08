@@ -75,7 +75,7 @@ system_configurations:
   enable_gpc_ai_platform_training:
     description: Whether or not to enable GPU training with GCP AI Platform
     type: boolean
-    value: True
+    value: False
   preprocessing_fn:
     description: Import path to the preprocessing function relative to the project directory
     type: string
@@ -96,7 +96,7 @@ model_configurations:
   seed:
     description: Starting seed of graph sample genration. Use null to avoid seeding.
     type: integer
-    value: null
+    value: 42
   num_epochs: 
     description: Number of training epochs
     type: integer

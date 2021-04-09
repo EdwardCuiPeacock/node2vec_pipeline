@@ -26,22 +26,6 @@ import tensorflow_transform.beam as tft_beam
 from tensorflow_transform.tf_metadata import dataset_metadata
 from tensorflow_transform.tf_metadata import schema_utils
 
-try:
-    from tensorflow.sparse import map_values
-except:
-    from tensorflow.python.framework import sparse_tensor
-
-    def map_values(op, *args):
-        """
-        Applies the `op` to the `.values` tensor of one or more `SparseTensor`s.
-        For tensorflow versions below 2.4. For versions above, use function
-        `tf.sparse.map_values`.
-        """
-        return sparse_tensor.SparseTensor(
-            args[0].indices, op(*[a.values for a in args]), args[0].dense_shape
-        )
-
-
 # %% Core module for node2vec sampling
 def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
     a_sm = sparse_csr_matrix_ops.sparse_tensor_to_csr_sparse_matrix(
@@ -74,7 +58,15 @@ def sample_from_sparse_tf(W_sample, seed=None):
     values_random = tf.random.uniform((W_sample.shape[0], ), minval=0, maxval=0.999, dtype="float32", seed=seed)
     sample_values = sample_values - tf.gather(values_random, W_sample.indices[:, 0])
     cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
-
+    
+    missing_rows = tf.sparse.to_dense(
+            tf.sets.difference(
+                [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf.indices[:, 0]).y]
+            )
+        ).numpy().tolist()
+    
+    logging.info("cdf missing rows: {missing_rows}")
+    
     # Remove negative values
     is_pos = tf.greater_equal(cdf.values, 0.)
     cdf_sample = tf.sparse.retain(cdf, is_pos)
@@ -88,10 +80,10 @@ def sample_from_sparse_tf(W_sample, seed=None):
     indices = tf.concat([tf.constant([1], dtype="int64"), 
                          index[1:, 0] - index[:-1, 0]], axis=0)
     s_next = index[:, 1][tf.greater(indices, 0)]
-
+    
     missing_rows = tf.sparse.to_dense(
             tf.sets.difference(
-                [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(W_sample.indices[:, 0]).y]
+                [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf_sample.indices[:, 0]).y]
             )
         ).numpy().tolist()
     

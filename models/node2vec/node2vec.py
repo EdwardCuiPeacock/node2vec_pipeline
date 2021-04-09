@@ -95,8 +95,7 @@ def sample_from_sparse_tf(W_sample, seed=None):
             )
         ).numpy().tolist()
     
-    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
-    logging.info(f"Any missing rows: {missing_rows}")
+    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}, missing rows: {missing_rows}")
     
     return W_sample, cdf, cdf_sample, s_next
     

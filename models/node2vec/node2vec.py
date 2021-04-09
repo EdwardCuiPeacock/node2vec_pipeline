@@ -65,12 +65,25 @@ def sample_from_sparse_tf(W_sample, seed=None):
             )
         ).numpy().tolist()
     
-    logging.info("cdf missing rows: {missing_rows}")
+    logging.info(f"cdf missing rows: {missing_rows}")
+    
+    
+    check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0))
+    logging.info(f"All cdf rows have some positive values: {check}")
     
     # Remove negative values
     is_pos = tf.greater_equal(cdf.values, 0.)
     cdf_sample = tf.sparse.retain(cdf, is_pos)
     cdf_sample = tf.sparse.reorder(cdf_sample)
+    
+    
+    missing_rows = tf.sparse.to_dense(
+           tf.sets.difference(
+               [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf_sample.indices[:, 0]).y]
+           )
+       ).numpy().tolist()
+     
+    logging.info(f"cdf_sample missing rows: {missing_rows}")
     
     # Materialize the samples: Take the first nonzero col of each row
     # s_next = tf.constant([list(item)[0][1] for _, item in \
@@ -81,13 +94,9 @@ def sample_from_sparse_tf(W_sample, seed=None):
                          index[1:, 0] - index[:-1, 0]], axis=0)
     s_next = index[:, 1][tf.greater(indices, 0)]
     
-    missing_rows = tf.sparse.to_dense(
-            tf.sets.difference(
-                [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf_sample.indices[:, 0]).y]
-            )
-        ).numpy().tolist()
+   
     
-    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}, missing rows: {missing_rows}")
+    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
     
     return W_sample, cdf, cdf_sample, s_next
     

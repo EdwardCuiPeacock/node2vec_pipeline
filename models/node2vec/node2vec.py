@@ -63,17 +63,19 @@ def preproc_W(W, symmetrify=True):
     return W
 
 
-def sample_from_sparse_tf(W_sample, seed=None):
+def sample_from_sparse_tf(W_sample, seed=None, DEBUG=True):
     """Take a sample given unnormalized weight matrix."""
     # Make sure the minimum value of the sampling weight matrix is not zero
+    epsilon=1E-7
     W_sample = tf.sparse.SparseTensor(W_sample.indices, 
                                       tf.clip_by_value(W_sample.values, 
-                                                       tf.keras.backend.epsilon(), 
+                                                       epsilon, 
                                                        tf.float32.max),
                                       W_sample.shape)
     
-    check = bool(tf.reduce_min(W_sample.values) > 0)
-    logging.info(f"All W_sample values are positive before normalization: {check}")
+    if DEBUG:
+        check = bool(tf.reduce_min(W_sample.values) > 0)
+        logging.info(f"All W_sample values are positive before normalization: {check}")
     
     # Normalize each row
     row_sum = tf.sparse.reduce_sum(W_sample, axis=1, keepdims=False)
@@ -81,51 +83,53 @@ def sample_from_sparse_tf(W_sample, seed=None):
     W_sample = tf.sparse.SparseTensor(W_sample.indices, normalized_values, W_sample.shape)
     W_sample = tf.sparse.reorder(W_sample) # Make sure the indices are sorted
     
-    check = bool(tf.reduce_min(W_sample.values) > 0)
-    logging.info(f"All W_sample values are positive after normalization: {check}")
-    
-    check = float(tf.reduce_min(tf.sparse.reduce_sum(W_sample, axis=1)))
-    logging.info(f"Min value of row sum after normalization (expected to be 1) {check}")
-    
-    # Use Inverse Trasnform sampling on the sparse matrix
-    values = tf.cumsum(W_sample.values)
-    values_floor = tf.floor(values)
-    values_floor_index = tf.cast(tf.abs(values - values_floor) < tf.keras.backend.epsilon(), "float64")
-    sample_values = values - values_floor + values_floor_index
+    if DEBUG:
+        check = bool(tf.reduce_min(W_sample.values) > 0)
+        logging.info(f"All W_sample values are positive after normalization: {check}")
+        
+        check = float(tf.reduce_min(tf.sparse.reduce_sum(W_sample, axis=1)))
+        logging.info(f"Min value of row sum after normalization (expected to be 1) {check}")
+            
+    # Compute the CDF 
+    sample_values = tf.cumsum(W_sample.values) - tf.cast(W_sample.indices[:, 0], "float64")
     cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
     cdf = tf.sparse.reorder(cdf)
     
-    check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0.999))
-    logging.info(f"All cdf rows cumulative of 1: {check}")
+    if DEBUG:
+        check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0.999))
+        logging.info(f"All cdf rows cumulative of 1: {check}")
     
+    # Use Inverse Trasnform sampling on the sparse matrix
     values_random = tf.random.uniform((cdf.shape[0], ), minval=0, maxval=0.999, dtype="float64", seed=seed)
     sample_values = cdf.values - tf.gather(values_random, cdf.indices[:, 0])
     cdf = tf.sparse.SparseTensor(cdf.indices, sample_values, dense_shape=cdf.shape)
     cdf = tf.sparse.reorder(cdf)
     
-    missing_rows = tf.sparse.to_dense(
-            tf.sets.difference(
-                [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf.indices[:, 0]).y]
-            )
-        ).numpy().tolist()
-    
-    logging.info(f"cdf missing rows: {missing_rows}")
-    
-    check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0))
-    logging.info(f"All cdf rows have some positive values: {check}")
+    if DEBUG:
+        missing_rows = tf.sparse.to_dense(
+                tf.sets.difference(
+                    [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf.indices[:, 0]).y]
+                )
+            ).numpy().tolist()
+        
+        logging.info(f"random df missing rows: {missing_rows}")
+        
+        check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0))
+        logging.info(f"All random cdf rows have some positive values: {check}")
     
     # Remove negative values
     is_pos = tf.greater_equal(cdf.values, 0.)
     cdf_sample = tf.sparse.retain(cdf, is_pos)
     cdf_sample = tf.sparse.reorder(cdf_sample)
     
-    missing_rows = tf.sparse.to_dense(
-           tf.sets.difference(
-               [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf_sample.indices[:, 0]).y]
-           )
-       ).numpy().tolist()
-     
-    logging.info(f"cdf_sample missing rows: {missing_rows}")
+    if DEBUG:
+        missing_rows = tf.sparse.to_dense(
+               tf.sets.difference(
+                   [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf_sample.indices[:, 0]).y]
+               )
+           ).numpy().tolist()
+         
+        logging.info(f"cdf_sample missing rows: {missing_rows}")
     
     # Materialize the samples: Take the first nonzero col of each row
     # s_next = tf.constant([list(item)[0][1] for _, item in \

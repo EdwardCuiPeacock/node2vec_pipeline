@@ -35,20 +35,32 @@ def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
         b.indices, b.values, b.dense_shape)
 
     c_sm = sparse_csr_matrix_ops.sparse_matrix_sparse_mat_mul(
-        a=a_sm, b=b_sm, type=tf.float32)
+        a=a_sm, b=b_sm, type="float64")
 
     c = sparse_csr_matrix_ops.csr_sparse_matrix_to_sparse_tensor(
-        c_sm, tf.float32)
+        c_sm, "float64")
 
     return tf.SparseTensor(
         c.indices, c.values, dense_shape=c.dense_shape)
 
-def sparse_reduce_min(X, axis=1):
-    neg_X = tf.sparse.SparseTensor(X.indices, -X.values, X.shape)
-    min_val = tf.sparse.reduce_max(neg_X, axis=axis) # dense
-    min_val = -min_val # 
-    return min_val
     
+def preproc_W(W, symmetrify=True):
+    W = tf.cast(W, "float64")
+    if symmetrify:
+        W = tf.sparse.maximum(W, tf.sparse.transpose(W)) # symmetrify
+    
+    if not bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)):
+        indices = tf.sparse.to_dense(
+            tf.sets.difference(
+                [tf.range(W.shape[0], dtype="int64")], [tf.unique(W.indices[:, 0]).y]
+            )
+        )
+        indices = tf.transpose(tf.concat([indices, indices], axis=0))
+        terms = tf.sparse.SparseTensor(
+            indices, tf.ones(indices.shape[0], dtype="float64"), dense_shape=W.shape
+        )
+        W = tf.sparse.add(W, terms)
+    return W
 
 
 def sample_from_sparse_tf(W_sample, seed=None):
@@ -60,22 +72,25 @@ def sample_from_sparse_tf(W_sample, seed=None):
                                                        tf.float32.max),
                                       W_sample.shape)
     
-    
-    check = bool(tf.reduce_all(sparse_reduce_min(W_sample, axis=1) > 0.))
+    check = bool(tf.reduce_min(W_sample.values) > 0)
     logging.info(f"All W_sample values are positive before normalization: {check}")
     
     # Normalize each row
-    row_sum = tf.sparse.reduce_sum(W_sample, axis=1, keepdims=True)
-    W_sample = W_sample.__div__(row_sum)
+    row_sum = tf.sparse.reduce_sum(W_sample, axis=1, keepdims=False)
+    normalized_values = tf.divide(W_sample.values, tf.gather(row_sum, W_sample.indices[:, 0]))
+    W_sample = tf.sparse.SparseTensor(W_sample.indices, normalized_values, W_sample.shape)
     W_sample = tf.sparse.reorder(W_sample) # Make sure the indices are sorted
     
-    check = bool(tf.reduce_all(sparse_reduce_min(W_sample, axis=1) > 0.))
+    check = bool(tf.reduce_min(W_sample.values) > 0)
     logging.info(f"All W_sample values are positive after normalization: {check}")
+    
+    check = float(tf.reduce_min(tf.sparse.reduce_sum(W_sample, axis=1)))
+    logging.info(f"Min value of row sum after normalization (expected to be 1) {check}")
     
     # Use Inverse Trasnform sampling on the sparse matrix
     values = tf.cumsum(W_sample.values)
     values_floor = tf.floor(values)
-    values_floor_index = tf.cast(values == values_floor, "float32")
+    values_floor_index = tf.cast(tf.abs(values - values_floor) < tf.keras.backend.epsilon(), "float64")
     sample_values = values - values_floor + values_floor_index
     cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
     cdf = tf.sparse.reorder(cdf)
@@ -83,9 +98,9 @@ def sample_from_sparse_tf(W_sample, seed=None):
     check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0.999))
     logging.info(f"All cdf rows cumulative of 1: {check}")
     
-    values_random = tf.random.uniform((W_sample.shape[0], ), minval=0, maxval=0.999, dtype="float32", seed=seed)
-    sample_values = sample_values - tf.gather(values_random, W_sample.indices[:, 0])
-    cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
+    values_random = tf.random.uniform((cdf.shape[0], ), minval=0, maxval=0.999, dtype="float64", seed=seed)
+    sample_values = cdf.values - tf.gather(values_random, cdf.indices[:, 0])
+    cdf = tf.sparse.SparseTensor(cdf.indices, sample_values, dense_shape=cdf.shape)
     cdf = tf.sparse.reorder(cdf)
     
     missing_rows = tf.sparse.to_dense(
@@ -95,7 +110,6 @@ def sample_from_sparse_tf(W_sample, seed=None):
         ).numpy().tolist()
     
     logging.info(f"cdf missing rows: {missing_rows}")
-    
     
     check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0))
     logging.info(f"All cdf rows have some positive values: {check}")
@@ -125,7 +139,7 @@ def sample_from_sparse_tf(W_sample, seed=None):
     logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
     
     return W_sample, cdf, cdf_sample, s_next
-    
+
 
 def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     # Get dimension
@@ -133,14 +147,14 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
 
     # alpha_1 / P
     P = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s0], axis=1), dtype="int64"), 
-                               tf.ones(num_nodes), 
+                               tf.ones(num_nodes, dtype="float64"), 
                                dense_shape=(num_nodes, num_nodes))
     # alpha_2 / R
-    A_0 = tf.sparse.SparseTensor(W.indices, tf.ones_like(W.values, dtype="float32"), dense_shape=W.shape)
+    A_0 = tf.sparse.SparseTensor(W.indices, tf.ones_like(W.values, dtype="float64"), dense_shape=W.shape)
     A_i_1 = tf_sparse_multiply(P, A_0)
 
     I = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"), 
-                               tf.ones(num_nodes), 
+                               tf.ones(num_nodes, dtype="float64"), 
                                dense_shape=(num_nodes, num_nodes)) # permutation matrix
     A_i = tf_sparse_multiply(I, A_0)
 
@@ -150,20 +164,20 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     R = tf.sparse.retain(R, is_nonzero)
 
     # alpha3 / Q
-    Q = tf.sparse.add(A_i, P.__mul__(tf.constant([-1], dtype="float32")))
-    Q = tf.sparse.add(Q, R.__mul__(tf.constant([-1], dtype="float32")))
+    Q = tf.sparse.add(A_i, P.__mul__(tf.constant([-1], dtype="float64")))
+    Q = tf.sparse.add(Q, R.__mul__(tf.constant([-1], dtype="float64")))
     is_nonzero = tf.not_equal(Q.values, 0)
     Q = tf.sparse.retain(Q, is_nonzero)
 
     # Combine to get the final weight
-    W_sample = tf.sparse.add(P.__mul__(tf.constant([1/p], dtype="float32")), R)
-    W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1/q], dtype="float32")))
+    W_sample = tf.sparse.add(P.__mul__(tf.constant([1/p], dtype="float64")), R)
+    W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1/q], dtype="float64")))
     is_nonzero = tf.not_equal(W_sample.values, 0)
     W_sample = tf.sparse.retain(W_sample, is_nonzero)
     W_sample = tf.sparse.reorder(W_sample)
 
     # Make sure the orders of indices are the same
-    W_new = tf_sparse_multiply(I, tf.cast(tf.sparse.reorder(W), dtype="float32"))
+    W_new = tf_sparse_multiply(I, tf.cast(tf.sparse.reorder(W), dtype="float64"))
     W_new = tf.sparse.reorder(W_new)
 
     # Multiply the weights by creating a new sparse matrix
@@ -178,35 +192,17 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
 
 
 def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
-    W = tf.cast(W, "float32")
-    if symmetrify:
-        W = tf.sparse.maximum(W, tf.sparse.transpose(W))
-        
-    # Make sure each row has at least 1 entry. The case where
-    # a row does not have a weight could happen when this is a
-    # directed graph (A -> B but not B -> A). In this case,
-    # we set the weight to itself as 1.
-    if not bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)):
-        indices = tf.sparse.to_dense(
-            tf.sets.difference(
-                [tf.range(W.shape[0], dtype="int64")], [tf.unique(W.indices[:, 0]).y]
-            )
-        )
-        indices = tf.transpose(tf.concat([indices, indices], axis=0))
-        terms = tf.sparse.SparseTensor(
-            indices, tf.ones(indices.shape[0]), dense_shape=W.shape
-        )
-        W = tf.sparse.add(W, terms)
+    W = preproc_W(W, symmetrify)
     
     checks = bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0))
-    logging.info(f"All rows have something: {checks}")
+    print(f"All rows have something: {checks}")
     
     # make sure the indices are sorted
     W = tf.sparse.reorder(W)
 
     # First step
     s0 = tf.range(W.shape[0], dtype="int64")
-    W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse_tf(W, seed=seed)
+    _, _, _, s1 = sample_from_sparse_tf(W, seed=seed)
     S = [s0, s1]
                   
     #print(f"check length: s0={len(s0)}, s1={len(s1)}")

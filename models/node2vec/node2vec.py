@@ -236,26 +236,35 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
     W = tf.cast(W, "float32")
     if symmetrify:
         W = tf.sparse.maximum(W, tf.sparse.transpose(W))
+        
     # Make sure each row has at least 1 entry. The case where
     # a row does not have a weight could happen when this is a
     # directed graph (A -> B but not B -> A). In this case,
     # we set the weight to itself as 1.
-    indices = tf.sparse.to_dense(
-        tf.sets.difference(
-            [tf.range(W.shape[0], dtype="int64")], [tf.unique(W.indices[:, 0]).y]
+    if not bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)):
+        indices = tf.sparse.to_dense(
+            tf.sets.difference(
+                [tf.range(W.shape[0], dtype="int64")], [tf.unique(W.indices[:, 0]).y]
+            )
         )
-    )
-    indices = tf.transpose(tf.concat([indices, indices], axis=0))
-    terms = tf.sparse.SparseTensor(
-        indices, tf.ones(indices.shape[0]), dense_shape=(10, 10)
-    )
-    W = tf.sparse.add(W, terms)
-    W = tf.sparse.reorder(W)  # make sure the indices are sorted
+        indices = tf.transpose(tf.concat([indices, indices], axis=0))
+        terms = tf.sparse.SparseTensor(
+            indices, tf.ones(indices.shape[0]), dense_shape=W.shape
+        )
+        W = tf.sparse.add(W, terms)
+    
+    checks = bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)
+    logging.info(f"All rows have something: {checks}")
+    
+    # make sure the indices are sorted
+    W = tf.sparse.reorder(W)
 
     # First step
     s0 = tf.range(W.shape[0], dtype="int64")
     W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse(W)
     S = [s0, s1]
+                  
+    logging.info(f"check length: s0={len(s0)}, s1={len(s1)}")
 
     for i in range(walk_length - 1):
         _, _, _, s_next = random_walk_sampling_step_tf(

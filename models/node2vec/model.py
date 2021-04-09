@@ -115,9 +115,9 @@ def _create_sampled_training_data(
     [type]
         [description]
     """
-    import psutil
-    total_memory = psutil.virtual_memory().total / 1E9
-    logging.info(f"Total memory: {total_memory} GB")
+    #import psutil
+    #total_memory = psutil.virtual_memory().total / 1E9
+    #logging.info(f"Total memory: {total_memory} GB")
     
     dataset_iterable = _read_transformed_dataset(
         file_pattern, data_accessor, tf_transform_output
@@ -158,14 +158,14 @@ def _create_sampled_training_data(
     dataset["weight"] = tf.boolean_mask(dataset["weight"], mask, axis=0)
 
     # logging.info(dataset) # verbose print
-    num_nodes = int(
+    count_unique_nodes = int(
         tf.shape(tf.unique(tf.reshape(dataset["indices"], shape=(-1,)))[0])[0]
     )
     
-    max_index = int(tf.reduce_max(dataset["indices"]))
-    #assert int(tf.reduce_max(dataset["indices"]))+1 == num_nodes, "max index is not the same as num_nodes"
+    num_nodes = int(tf.reduce_max(dataset["indices"])) + 1
+    #assert int(tf.reduce_max(dataset["indices"]))+1 == count_unique_nodes, "max index is not the same as num_nodes"
 
-    logging.info(f"Max index / Num nodes: {max_index} / {num_nodes}")
+    logging.info(f"Max index / Num unique nodes: {num_nodes} / {count_unique_nodes}")
     
     # Build the graph from the entire dataset
     W = tf.sparse.SparseTensor(

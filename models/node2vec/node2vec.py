@@ -90,7 +90,7 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=True):
         check = float(tf.reduce_min(tf.sparse.reduce_sum(W_sample, axis=1)))
         logging.info(f"Min value of row sum after normalization (expected to be 1) {check}")
             
-    # Compute the CDF 
+    # Compute the CDF row-wise
     sample_values = tf.cumsum(W_sample.values) - tf.cast(W_sample.indices[:, 0], "float64")
     cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
     cdf = tf.sparse.reorder(cdf)
@@ -118,7 +118,7 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=True):
         logging.info(f"All random cdf rows have some positive values: {check}")
     
     # Remove negative values
-    is_pos = tf.greater_equal(cdf.values, 0.)
+    is_pos = tf.greater_equal(cdf.values, -epsilon)
     cdf_sample = tf.sparse.retain(cdf, is_pos)
     cdf_sample = tf.sparse.reorder(cdf_sample)
     

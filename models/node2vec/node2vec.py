@@ -45,19 +45,32 @@ def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
 
 def sample_from_sparse_tf(W_sample, seed=None):
     """Take a sample given unnormalized weight matrix."""
+    check = bool(tf.reduce_all(W_sample > 0, axis=1))
+    logging.info(f"All W_sample values are positive before normalization: {check}")
+    
     # Normalize each row
     row_sum = tf.sparse.reduce_sum(W_sample, axis=1, keepdims=True)
     W_sample = W_sample.__div__(row_sum)
     W_sample = tf.sparse.reorder(W_sample) # Make sure the indices are sorted
     
-    # uniform_sample = tf.random.uniform((num_nodes, 1), minval=0, maxval=1)
+    check = bool(tf.reduce_all(W_sample > 0, axis=1))
+    logging.info(f"All W_sample values are positive after normalization: {check}")
+    
+    # Use Inverse Trasnform sampling on the sparse matrix
     values = tf.cumsum(W_sample.values)
     values_floor = tf.floor(values)
     values_floor_index = tf.cast(values == values_floor, "float32")
     sample_values = values - values_floor + values_floor_index
+    cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
+    cdf = tf.sparse.reorder(cdf)
+    check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0.999))
+    logging.info(f"All cdf rows cumulative of 1: {check}")
+    
+    
     values_random = tf.random.uniform((W_sample.shape[0], ), minval=0, maxval=0.999, dtype="float32", seed=seed)
     sample_values = sample_values - tf.gather(values_random, W_sample.indices[:, 0])
     cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
+    cdf = tf.sparse.reorder(cdf)
     
     missing_rows = tf.sparse.to_dense(
             tf.sets.difference(

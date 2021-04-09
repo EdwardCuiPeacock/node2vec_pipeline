@@ -13,7 +13,8 @@ import tensorflow as tf
 import tensorflow_transform as tft
 
 from models.node2vec.node2vec import (
-    sample_1_iteration,
+    sample_1_iteration_tf,
+    sample_1_iteration_numpy,
     generate_skipgram_beam,
     build_keras_model,
 )
@@ -182,10 +183,10 @@ def _create_sampled_training_data(
     for r in range(train_repetitions):
         # Take the sample
         cur_seed = (seed + r * walk_length) if seed is not None else None
-        S = sample_1_iteration(W, p, q, walk_length, seed=cur_seed)
+        S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
 
         # Write the tensor to a TFRecord file
-        S = tf.transpose(tf.stack(S, axis=0))
+        S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int64")
         data_uri, num_rows_saved = generate_skipgram_beam(
             S,
             num_nodes,
@@ -206,10 +207,10 @@ def _create_sampled_training_data(
         cur_seed = (
             (seed + (train_repetitions + r) * walk_length) if seed is not None else None
         )
-        S = sample_1_iteration(W, p, q, walk_length, seed=cur_seed)
+        S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
 
         # Write the tensor to a TFRecord file
-        S = tf.transpose(tf.stack(S, axis=0))
+        S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int64")
         data_uri, num_rows_saved = generate_skipgram_beam(
             S,
             num_nodes,

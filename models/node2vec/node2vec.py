@@ -5,6 +5,7 @@ import time
 from typing import Text, Optional, Union, Callable, List
 import numpy as np
 from tqdm import tqdm
+from scipy.sparse import coo_matrix, csr_matrix
 
 import tensorflow as tf
 from tensorflow.keras.layers import (
@@ -72,7 +73,7 @@ def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
     return tf.SparseTensor(c.indices, c.values, dense_shape=c.dense_shape)
 
 
-def sample_from_sparse(W_sample, seed=None):
+def sample_from_sparse_tf(W_sample, seed=None):
     """Take a sample given unnormalized sparse weight matrix."""
     # Normalize each row
     row_sum = tf.sparse.reduce_sum(W_sample, axis=1, keepdims=True)
@@ -199,12 +200,12 @@ def random_walk_sampling_step_tf(
     )
 
     # Taking samples from the sparse matrix
-    W_sample, cdf, cdf_sample, s_next = sample_from_sparse(W_sample, seed=seed)
+    W_sample, cdf, cdf_sample, s_next = sample_from_sparse_tf(W_sample, seed=seed)
 
     return W_sample, cdf, cdf_sample, s_next
 
 
-def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
+def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
     """
     Sample 1 full iteration of the random walk.
 
@@ -253,7 +254,7 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
         )
         W = tf.sparse.add(W, terms)
     
-    checks = bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)
+    checks = bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0))
     logging.info(f"All rows have something: {checks}")
     
     # make sure the indices are sorted
@@ -261,7 +262,7 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
 
     # First step
     s0 = tf.range(W.shape[0], dtype="int64")
-    W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse(W)
+    W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse_tf(W)
     S = [s0, s1]
                   
     logging.info(f"check length: s0={len(s0)}, s1={len(s1)}")
@@ -278,6 +279,88 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
     return S
 
 
+# %% Numpy implementation of sampling
+def sample_from_sparse_numpy(W_sample, seed=None):
+    num_nodes = W_sample.shape[0]
+    # Normalize for each row
+    row_sum = np.asarray(W_sample.sum(axis=1)).ravel() # dense
+    W_sample = W_sample.tocoo()
+    W_sample.data /= np.take(row_sum, W_sample.row)
+    
+    # Compute cdf cumsum with csr matrix
+    cdf = W_sample.copy().tocsr()
+    cdf.data = np.cumsum(cdf.data)
+    cdf = cdf.tocoo()
+    # Subtract each row by broadcasting
+    cdf.data -= np.take(np.arange(num_nodes), cdf.row)
+    
+    # Take the sample
+    rs = np.random.RandomState(seed)
+    uniform_sample = rs.rand(num_nodes)  # [0, 1)
+    cdf.data -= np.take(uniform_sample, cdf.row)
+    # remove any negative
+    samp_ind = cdf.data >= 0
+    cdf.data = cdf.data[samp_ind]
+    cdf.row = cdf.row[samp_ind]
+    cdf.col = cdf.col[samp_ind]
+    
+    # Slice out the column indices: starting index of each row
+    cdf = cdf.tocsr()
+    s_next = cdf.indices[cdf.indptr[:-1]]
+    
+    return W_sample, cdf, s_next
+    
+
+def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
+    """Take 1 step of the random walk, with numpy / scipy.sparse."""
+    num_nodes = W.shape[0]
+    # alpha_1 / P
+    P = coo_matrix((np.ones(num_nodes), 
+                    (np.arange(num_nodes), s0))
+                  ).tocsc()
+    # alpha_2 / R
+    A_i = W.copy().tocsc()
+    A_i.data[:] = 1
+    R = A_i[s1, :].multiply(A_i[s0, :]) # elementwise multiply
+    # alpha_3 / Q
+    Q = A_i[s1, :] - P - R
+    A_i = None # free some memory
+    
+    # Combine to get the final weight
+    W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W.tocsc()[s1, :])
+    #print(W_sample.toarray())
+    P, Q, R = None, None, None # free some memory
+    
+    W_sample, cdf, s_next = sample_from_sparse_numpy(W_sample, seed=None)
+    
+    return W_sample, cdf, s_next
+
+def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None):
+    if symmetrify:
+        W = W.maximum(W.transpose())
+    # Make sure each row has at least 1 entry
+    indices = W.getnnz(axis=1) < 1
+    if np.sum(indices) > 0:
+        indices = np.where(indices)[0]
+        W.row = np.concatenate([W.row, indices], axis=0)
+        W.col = np.concatenate([W.col, indices], axis=0)
+        W.data = np.concatenate([W.data, np.ones_like(indices)], axis=0)
+
+    # First step
+    s0 = np.arange(W.shape[0])
+    W_sample_1, cdf_1, s1 = sample_from_sparse_numpy(W, seed=seed)
+    S = [s0, s1]
+
+    for i in range(walk_length - 1):
+        _, _, s_next = random_walk_sampling_step_numpy(
+            W, S[-2], S[-1], p, q, seed=seed + 1 + i if seed is not None else None
+        )
+        S.append(s_next)
+
+    # for ii, ss in enumerate(S):  # verbose print
+    #     logging.info(f"s{ii}: {ss}")
+
+    return S
 # %% Numpy procedure to generate skipgrams
 def generate_skipgram_numpy(
     S, vocab_size=10, window_size=4, negative_samples=0.0, seed=None, shuffle=True

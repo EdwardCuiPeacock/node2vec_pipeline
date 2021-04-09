@@ -168,6 +168,8 @@ def _create_sampled_training_data(
     #assert int(tf.reduce_max(dataset["indices"]))+1 == count_unique_nodes, "max index is not the same as num_nodes"
 
     logging.info(f"Max index / Num unique nodes: {num_nodes} / {count_unique_nodes}")
+    num_edges = len(dataset["weight"])
+    logging.info(f"num edges: {num_edges}")
     
     # Build the graph from the entire dataset
     W = tf.sparse.SparseTensor(

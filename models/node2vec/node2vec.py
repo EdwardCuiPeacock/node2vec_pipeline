@@ -236,21 +236,20 @@ def sample_1_iteration(W, p, q, walk_length=80, symmetrify=True, seed=None):
     W = tf.cast(W, "float32")
     if symmetrify:
         W = tf.sparse.maximum(W, tf.sparse.transpose(W))
-    else:
-        # Make sure each row has at least 1 entry. The case where
-        # a row does not have a weight could happen when this is a
-        # directed graph (A -> B but not B -> A). In this case,
-        # we set the weight to itself as 1.
-        indices = tf.sparse.to_dense(
-            tf.sets.difference(
-                [tf.range(W.shape[0], dtype="int64")], [tf.unique(W.indices[:, 0]).y]
-            )
+    # Make sure each row has at least 1 entry. The case where
+    # a row does not have a weight could happen when this is a
+    # directed graph (A -> B but not B -> A). In this case,
+    # we set the weight to itself as 1.
+    indices = tf.sparse.to_dense(
+        tf.sets.difference(
+            [tf.range(W.shape[0], dtype="int64")], [tf.unique(W.indices[:, 0]).y]
         )
-        indices = tf.transpose(tf.concat([indices, indices], axis=0))
-        terms = tf.sparse.SparseTensor(
-            indices, tf.ones(indices.shape[0]), dense_shape=(10, 10)
-        )
-        W = tf.sparse.add(W, terms)
+    )
+    indices = tf.transpose(tf.concat([indices, indices], axis=0))
+    terms = tf.sparse.SparseTensor(
+        indices, tf.ones(indices.shape[0]), dense_shape=(10, 10)
+    )
+    W = tf.sparse.add(W, terms)
     W = tf.sparse.reorder(W)  # make sure the indices are sorted
 
     # First step

@@ -170,11 +170,11 @@ def _create_sampled_training_data(
     logging.info(f"Max index / Num unique nodes: {num_nodes} / {count_unique_nodes}")
     
     # Build the graph from the entire dataset
-    #W = tf.sparse.SparseTensor(
-    #    dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes)
-    #)
-    W = coo_matrix((dataset["weight"].numpy(), (dataset["indices"][:, 0].numpy(), 
-            dataset["indices"][:, 1].numpy())), shape=(num_nodes, num_nodes))
+    W = tf.sparse.SparseTensor(
+        dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes)
+    )
+    #W = coo_matrix((dataset["weight"].numpy(), (dataset["indices"][:, 0].numpy(), 
+    #        dataset["indices"][:, 1].numpy())), shape=(num_nodes, num_nodes))
     
     # Check to see if all rows have at least 1 neighbor
     #assert bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)), "not all rows have at least 1 neighbor"
@@ -184,7 +184,7 @@ def _create_sampled_training_data(
     for r in range(train_repetitions):
         # Take the sample
         cur_seed = (seed + r * walk_length) if seed is not None else None
-        S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
+        S = sample_1_iteration_tf(W, p, q, walk_length, seed=cur_seed)
 
         # Write the tensor to a TFRecord file
         S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int64")
@@ -208,7 +208,7 @@ def _create_sampled_training_data(
         cur_seed = (
             (seed + (train_repetitions + r) * walk_length) if seed is not None else None
         )
-        S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
+        S = sample_1_iteration_tf(W, p, q, walk_length, seed=cur_seed)
 
         # Write the tensor to a TFRecord file
         S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int64")

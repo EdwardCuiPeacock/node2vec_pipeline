@@ -238,7 +238,7 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
 
 def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None):
     if symmetrify:
-        W = W.maximum(W.transpose())
+        W = W.maximum(W.transpose()).tocoo()
     # Make sure each row has at least 1 entry
     indices = W.getnnz(axis=1) < 1
     if np.sum(indices) > 0:

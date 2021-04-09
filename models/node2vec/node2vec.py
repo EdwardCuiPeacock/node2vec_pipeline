@@ -102,6 +102,9 @@ def sample_from_sparse_tf(W_sample, seed=None):
         [tf.constant([1], dtype="int64"), index[1:, 0] - index[:-1, 0]], axis=0
     )
     s_next = index[:, 1][tf.greater(indices, 0)]
+    
+    s_length = s_next.shape[0]
+    logging.info(f"fSampled length s={s_length} vs. W_size={W_sample.shape[0]}")
 
     return W_sample, cdf, cdf_sample, s_next
 
@@ -264,8 +267,6 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
     s0 = tf.range(W.shape[0], dtype="int64")
     W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse_tf(W)
     S = [s0, s1]
-                  
-    logging.info(f"check length: s0={len(s0)}, s1={len(s1)}")
 
     for i in range(walk_length - 1):
         _, _, _, s_next = random_walk_sampling_step_tf(
@@ -337,7 +338,7 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
 
 def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None):
     if symmetrify:
-        W = W.maximum(W.transpose())
+        W = W.maximum(W.transpose()).tocoo()
     # Make sure each row has at least 1 entry
     indices = W.getnnz(axis=1) < 1
     if np.sum(indices) > 0:

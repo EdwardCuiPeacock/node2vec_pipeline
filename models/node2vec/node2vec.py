@@ -236,7 +236,7 @@ def sample_from_sparse_numpy(W_sample, seed=None):
     cdf.data = np.cumsum(cdf.data)
     cdf = cdf.tocoo()
     # Subtract each row by broadcasting
-    cdf.data -= np.take(np.arange(num_nodes), cdf.row)
+    cdf.data = cdf.data - cdf.row
     
     # Take the sample
     rs = np.random.RandomState(seed)
@@ -275,6 +275,8 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
     #print(W_sample.toarray())
     P, Q, R = None, None, None # free some memory
     
+    # Make sure the rows are sorted
+    W_sample = W_sample.tocsr()
     W_sample, cdf, s_next = sample_from_sparse_numpy(W_sample, seed=None)
     
     return W_sample, cdf, s_next
@@ -288,7 +290,7 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
         indices = np.where(indices)[0]
         W.row = np.concatenate([W.row, indices], axis=0)
         W.col = np.concatenate([W.col, indices], axis=0)
-        W.data = np.concatenate([W.data, np.ones_like(indices)], axis=0)    
+        W.data = np.concatenate([W.data, np.ones_like(indices)], axis=0)
 
     # First step
     s0 = np.arange(W.shape[0])

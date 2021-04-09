@@ -67,23 +67,36 @@ def sample_from_sparse_tf(W_sample, seed=None):
     W_sample = tf.sparse.reorder(W_sample) # Make sure the indices are sorted
     
     # uniform_sample = tf.random.uniform((num_nodes, 1), minval=0, maxval=1)
-    cdf = tf.map_fn(lambda x: tf.sparse.map_values(
-        lambda y: tf.cumsum(y) - tf.random.uniform((1,), minval=0, maxval=1, seed=seed), x), 
-                    W_sample) # map to each row
-    is_pos = tf.greater_equal(cdf.values, 0)
+    values = tf.cumsum(W_sample.values)
+    values_floor = tf.floor(values)
+    values_floor_index = tf.cast(values == values_floor, "float32")
+    sample_values = values - values_floor + values_floor_index
+    values_random = tf.random.uniform((W_sample.shape[0], ), minval=0, maxval=0.999, dtype="float32", seed=seed)
+    sample_values = sample_values - tf.gather(values_random, W_sample.indices[:, 0])
+    cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
+
+    # Remove negative values
+    is_pos = tf.greater_equal(cdf.values, 0.)
     cdf_sample = tf.sparse.retain(cdf, is_pos)
     cdf_sample = tf.sparse.reorder(cdf_sample)
     
     # Materialize the samples: Take the first nonzero col of each row
-    #s_next = tf.constant([list(item)[0][1] for _, item in \
+    # s_next = tf.constant([list(item)[0][1] for _, item in \
     #    itertools.groupby(cdf_sample.indices.numpy(), lambda x: x[0])])
     # Casting to csr matrix
     index = cdf_sample.indices # assuming sorted already
     indices = tf.concat([tf.constant([1], dtype="int64"), 
                          index[1:, 0] - index[:-1, 0]], axis=0)
     s_next = index[:, 1][tf.greater(indices, 0)]
+
+    missing_rows = tf.sparse.to_dense(
+            tf.sets.difference(
+                [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(W_sample.indices[:, 0]).y]
+            )
+        ).numpy().tolist()
     
-    logging.info(f"Sanity check: s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
+    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
+    logging.info(f"Any missing rows: {missing_rows}")
     
     return W_sample, cdf, cdf_sample, s_next
     
@@ -97,7 +110,7 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
                                tf.ones(num_nodes), 
                                dense_shape=(num_nodes, num_nodes))
     # alpha_2 / R
-    A_0 = tf.cast(tf.sparse.map_values(tf.ones_like, W), "float32")
+    A_0 = tf.sparse.SparseTensor(W.indices, tf.ones_like(W.values, dtype="float32"), dense_shape=W.shape)
     A_i_1 = tf_sparse_multiply(P, A_0)
 
     I = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"), 
@@ -121,14 +134,16 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1/q], dtype="float32")))
     is_nonzero = tf.not_equal(W_sample.values, 0)
     W_sample = tf.sparse.retain(W_sample, is_nonzero)
+    W_sample = tf.sparse.reorder(W_sample)
 
     # Make sure the orders of indices are the same
-    W_sample = tf.sparse.reorder(W_sample)
     W_new = tf_sparse_multiply(I, tf.cast(tf.sparse.reorder(W), dtype="float32"))
     W_new = tf.sparse.reorder(W_new)
 
     # Multiply the weights by creating a new sparse matrix
-    W_sample = tf.sparse.map_values(tf.multiply, W_sample, W_new)
+    W_sample = tf.sparse.SparseTensor(W_sample.indices, 
+                                      W_sample.values * W_new.values,
+                                      dense_shape=W_sample.shape)
 
     # Taking samples from the sparse matrix
     W_sample, cdf, cdf_sample, s_next = sample_from_sparse_tf(W_sample, seed=seed)
@@ -158,7 +173,7 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
         W = tf.sparse.add(W, terms)
     
     checks = bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0))
-    logging.info(f"Sanity check: All rows have something: {checks}")
+    logging.info(f"All rows have something: {checks}")
     
     # make sure the indices are sorted
     W = tf.sparse.reorder(W)
@@ -168,6 +183,8 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
     W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse_tf(W, seed=seed)
     S = [s0, s1]
                   
+    #print(f"check length: s0={len(s0)}, s1={len(s1)}")
+
     for i in range(walk_length - 1):
         _, _, _, s_next = random_walk_sampling_step_tf(
             W, S[-2], S[-1], p, q, seed=(seed + i + 1) if seed is not None else None

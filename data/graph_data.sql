@@ -65,7 +65,7 @@ token_clean AS (
 ),
 intermediate_result AS (
     SELECT distinct InSeasonSeries_Id,
-        tags AS token,
+        RTRIM(LTRIM(tags)) AS token,
         1 AS token_count
     FROM melted
     UNION ALL
@@ -83,4 +83,5 @@ SELECT InSeasonSeries_Id,
     SUM(token_count) AS token_count
 FROM intermediate_result
 GROUP BY InSeasonSeries_Id, token 
+HAVING token NOT IN ("", " ")
 {{ DEBUG_SETTINGS }}

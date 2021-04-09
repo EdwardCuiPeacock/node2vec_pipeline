@@ -43,10 +43,10 @@ def preprocessing_fn(inputs):
     # output as a dict
     output = {}
     output["InSeasonSeries_Id"] = tft.apply_vocabulary(
-        content, deferred_vocab_filename_tensor=vocab_uri, default_value=0
+        content, deferred_vocab_filename_tensor=vocab_uri, default_value=-1
     )
     output["token"] = tft.apply_vocabulary(
-        token, deferred_vocab_filename_tensor=vocab_uri, default_value=0
+        token, deferred_vocab_filename_tensor=vocab_uri, default_value=-1
     )
     output["weight"] = tf.constant([1.0], dtype="float32") / tf.cast(
         token_count, "float32"

@@ -115,6 +115,10 @@ def _create_sampled_training_data(
     [type]
         [description]
     """
+    import psutil
+    total_memory = psutil.virtual_memory().total / 1E9
+    logging.info(f"Total memory: {total_memory} GB")
+    
     dataset_iterable = _read_transformed_dataset(
         file_pattern, data_accessor, tf_transform_output
     )
@@ -122,35 +126,55 @@ def _create_sampled_training_data(
     logging.info(dataset_iterable)
     # Iterate over the batches and build the final dict
     dataset = {"indices": [], "weight": []}
-    pandas_data = {"InSeasonSeries_Id":[], "token":[], "weight":[]}
+    #pandas_data = {"InSeasonSeries_Id":[], "token":[], "weight":[]}
     for batch_data in dataset_iterable:
         dataset["indices"].append(
             tf.concat([batch_data["InSeasonSeries_Id"], batch_data["token"]], axis=1)
         )
         dataset["weight"].append(batch_data["weight"])
 
-        pandas_data["InSeasonSeries_Id"].append(batch_data["InSeasonSeries_Id"].numpy())
-        pandas_data["token"].append(batch_data["token"].numpy())
-        pandas_data["weight"].append(batch_data["weight"].numpy())
+    #    pandas_data["InSeasonSeries_Id"].append(batch_data["InSeasonSeries_Id"].numpy().ravel())
+    #    pandas_data["token"].append(batch_data["token"].numpy().ravel())
+    #    pandas_data["weight"].append(batch_data["weight"].numpy().ravel())
 
-    pandas_data = pd.DataFrame({k: np.concatenate(v, axis=0) for k, v in pandas_data.items()})
-    pandas_data.to_csv(os.path.join(temp_dir, "transformed_csv_data.csv"))
-    logging.info(f"Saved pandas dataframe at {temp_dir}")
+    # pandas_data = {k: list(map(float,list(np.concatenate(v, axis=0)))) for k, v in pandas_data.items()}
+    
+    #from google.cloud import storage
+    #import json
+    #client = storage.client.Client(project="res-nbcupea-dev-ds-sandbox-001")
+    #bucket = client.get_bucket("edc-dev")
+    #blob = bucket.blob("output_pandas.json")
+    #blob.upload_from_string(data=json.dumps(pandas_data), 
+    #                       content_type="application/json")
+    #logging.info(f"Saved pandas dataframe at bucket base")
 
     # Merge into a single tensor
     dataset = {k: tf.concat(v, axis=0) for k, v in dataset.items()}
     dataset["weight"] = tf.reshape(dataset["weight"], shape=(-1,))  # flatten
-    # logging.info(dataset) # verbose print
+    
+    # Remove any unmatched vocabularies
+    mask = tf.reduce_all(dataset["indices"] > 0, axis=1)
+    dataset["indices"] = tf.boolean_mask(dataset["indices"], mask, axis=0)
+    dataset["weight"] = tf.boolean_mask(dataset["weight"], mask, axis=0)
 
-    # Build the graph from the entire dataset
+    # logging.info(dataset) # verbose print
     num_nodes = int(
         tf.shape(tf.unique(tf.reshape(dataset["indices"], shape=(-1,)))[0])[0]
     )
+    
+    max_index = int(tf.reduce_max(dataset["indices"]))
+    #assert int(tf.reduce_max(dataset["indices"]))+1 == num_nodes, "max index is not the same as num_nodes"
+
+    logging.info(f"Max index / Num nodes: {max_index} / {num_nodes}")
+    
+    # Build the graph from the entire dataset
     W = tf.sparse.SparseTensor(
         dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes)
     )
-
-    logging.info(f"Num nodes: {num_nodes}")
+    
+    # Check to see if all rows have at least 1 neighbor
+    #assert bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)), "not all rows have at least 1 neighbor"
+    
 
     train_data_uri_list = []
     train_data_size = 0

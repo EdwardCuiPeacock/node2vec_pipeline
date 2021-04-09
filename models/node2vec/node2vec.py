@@ -53,6 +53,13 @@ def sparse_reduce_min(X, axis=1):
 
 def sample_from_sparse_tf(W_sample, seed=None):
     """Take a sample given unnormalized weight matrix."""
+    # Make sure the minimum value of the sampling weight matrix is not zero
+    W_sample = tf.sparse.SparseTensor(W_sample.indices, 
+                                      tf.clip_by_value(W_sample.values, 
+                                                       tf.keras.backend.epsilon(), 
+                                                       tf.float32.max),
+                                      W_sample.shape)
+    
     
     check = bool(tf.reduce_all(sparse_reduce_min(W_sample, axis=1) > 0.))
     logging.info(f"All W_sample values are positive before normalization: {check}")
@@ -281,7 +288,7 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
         indices = np.where(indices)[0]
         W.row = np.concatenate([W.row, indices], axis=0)
         W.col = np.concatenate([W.col, indices], axis=0)
-        W.data = np.concatenate([W.data, np.ones_like(indices)], axis=0)
+        W.data = np.concatenate([W.data, np.ones_like(indices)], axis=0)    
 
     # First step
     s0 = np.arange(W.shape[0])

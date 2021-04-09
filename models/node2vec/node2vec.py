@@ -63,7 +63,7 @@ def preproc_W(W, symmetrify=True):
     return W
 
 
-def sample_from_sparse_tf(W_sample, seed=None, DEBUG=True):
+def sample_from_sparse_tf(W_sample, seed=None, DEBUG=False):
     """Take a sample given unnormalized weight matrix."""
     # Make sure the minimum value of the sampling weight matrix is not zero
     epsilon=1E-7

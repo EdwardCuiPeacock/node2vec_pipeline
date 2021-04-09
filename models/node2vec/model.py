@@ -341,6 +341,9 @@ def run_fn(fn_args):
     logging.info(f"fn attributes {fn_lists}")
     logging.info(f"tansformed_oputput {fn_args.transform_output}")
 
+    logging.info("See if GPU is available")
+    logging.info(tf.config.list_physical_devices("GPU"))
+
     # Get some parameters
     system_config = fn_args.custom_config["system_config"]
     model_config = fn_args.custom_config["model_config"]
@@ -404,9 +407,6 @@ def run_fn(fn_args):
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir=fn_args.model_run_dir, update_freq="batch"
     )
-
-    logging.info("See if GPU is available")
-    logging.info(tf.config.list_physical_devices("GPU"))
 
     # Do the fitting
     train_steps = train_data_size // train_batch_size + 1 * (

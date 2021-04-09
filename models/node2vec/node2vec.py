@@ -43,9 +43,18 @@ def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
     return tf.SparseTensor(
         c.indices, c.values, dense_shape=c.dense_shape)
 
+def sparse_reduce_min(X, axis=1):
+    neg_X = tf.sparse.SparseTensor(X.indices, -X.values, X.shape)
+    min_val = tf.sparse.reduce_max(neg_X, axis=axis) # dense
+    min_val = -min_val # 
+    return min_val
+    
+
+
 def sample_from_sparse_tf(W_sample, seed=None):
     """Take a sample given unnormalized weight matrix."""
-    check = bool(tf.reduce_all(W_sample > 0, axis=1))
+    
+    check = bool(tf.reduce_all(sparse_reduce_min(W_sample, axis=1) > 0.))
     logging.info(f"All W_sample values are positive before normalization: {check}")
     
     # Normalize each row
@@ -53,7 +62,7 @@ def sample_from_sparse_tf(W_sample, seed=None):
     W_sample = W_sample.__div__(row_sum)
     W_sample = tf.sparse.reorder(W_sample) # Make sure the indices are sorted
     
-    check = bool(tf.reduce_all(W_sample > 0, axis=1))
+    check = bool(tf.reduce_all(sparse_reduce_min(W_sample, axis=1) > 0.))
     logging.info(f"All W_sample values are positive after normalization: {check}")
     
     # Use Inverse Trasnform sampling on the sparse matrix
@@ -63,9 +72,9 @@ def sample_from_sparse_tf(W_sample, seed=None):
     sample_values = values - values_floor + values_floor_index
     cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
     cdf = tf.sparse.reorder(cdf)
+    
     check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0.999))
     logging.info(f"All cdf rows cumulative of 1: {check}")
-    
     
     values_random = tf.random.uniform((W_sample.shape[0], ), minval=0, maxval=0.999, dtype="float32", seed=seed)
     sample_values = sample_values - tf.gather(values_random, W_sample.indices[:, 0])
@@ -89,7 +98,6 @@ def sample_from_sparse_tf(W_sample, seed=None):
     cdf_sample = tf.sparse.retain(cdf, is_pos)
     cdf_sample = tf.sparse.reorder(cdf_sample)
     
-    
     missing_rows = tf.sparse.to_dense(
            tf.sets.difference(
                [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf_sample.indices[:, 0]).y]
@@ -106,8 +114,6 @@ def sample_from_sparse_tf(W_sample, seed=None):
     indices = tf.concat([tf.constant([1], dtype="int64"), 
                          index[1:, 0] - index[:-1, 0]], axis=0)
     s_next = index[:, 1][tf.greater(indices, 0)]
-    
-   
     
     logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
     

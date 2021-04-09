@@ -155,7 +155,7 @@ def _create_sampled_training_data(
     dataset["weight"] = tf.reshape(dataset["weight"], shape=(-1,))  # flatten
     
     # Remove any unmatched vocabularies
-    mask = tf.reduce_all(dataset["indices"] > 0, axis=1)
+    mask = tf.reduce_all(dataset["indices"] >= 0, axis=1)
     dataset["indices"] = tf.boolean_mask(dataset["indices"], mask, axis=0)
     dataset["weight"] = tf.boolean_mask(dataset["weight"], mask, axis=0)
 

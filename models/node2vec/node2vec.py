@@ -83,7 +83,7 @@ def sample_from_sparse_tf(W_sample, seed=None):
                          index[1:, 0] - index[:-1, 0]], axis=0)
     s_next = index[:, 1][tf.greater(indices, 0)]
     
-    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
+    logging.info(f"Sanity check: s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
     
     return W_sample, cdf, cdf_sample, s_next
     
@@ -158,7 +158,7 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
         W = tf.sparse.add(W, terms)
     
     checks = bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0))
-    logging.info(f"All rows have something: {checks}")
+    logging.info(f"Sanity check: All rows have something: {checks}")
     
     # make sure the indices are sorted
     W = tf.sparse.reorder(W)

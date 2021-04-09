@@ -178,8 +178,6 @@ def _create_sampled_training_data(
     
     # Check to see if all rows have at least 1 neighbor
     #assert bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)), "not all rows have at least 1 neighbor"
-    
-
     train_data_uri_list = []
     train_data_size = 0
     # Create the TFRecords for training data

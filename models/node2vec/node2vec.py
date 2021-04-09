@@ -44,130 +44,65 @@ except:
 
 # %% Core module for node2vec sampling
 def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
-    """
-    Sparse matrix multiplication between 2 SparseTensors in tensorflow.
-
-    Parameters
-    ----------
-    a : tf.SparseTensor
-    b : tf.SparseTensor
-
-    Returns
-    -------
-    c : tf.SparseTensor
-    """
     a_sm = sparse_csr_matrix_ops.sparse_tensor_to_csr_sparse_matrix(
-        a.indices, a.values, a.dense_shape
-    )
+        a.indices, a.values, a.dense_shape)
 
     b_sm = sparse_csr_matrix_ops.sparse_tensor_to_csr_sparse_matrix(
-        b.indices, b.values, b.dense_shape
-    )
+        b.indices, b.values, b.dense_shape)
 
     c_sm = sparse_csr_matrix_ops.sparse_matrix_sparse_mat_mul(
-        a=a_sm, b=b_sm, type=tf.float32
-    )
+        a=a_sm, b=b_sm, type=tf.float32)
 
-    c = sparse_csr_matrix_ops.csr_sparse_matrix_to_sparse_tensor(c_sm, tf.float32)
+    c = sparse_csr_matrix_ops.csr_sparse_matrix_to_sparse_tensor(
+        c_sm, tf.float32)
 
-    return tf.SparseTensor(c.indices, c.values, dense_shape=c.dense_shape)
-
+    return tf.SparseTensor(
+        c.indices, c.values, dense_shape=c.dense_shape)
 
 def sample_from_sparse_tf(W_sample, seed=None):
-    """Take a sample given unnormalized sparse weight matrix."""
+    """Take a sample given unnormalized weight matrix."""
     # Normalize each row
     row_sum = tf.sparse.reduce_sum(W_sample, axis=1, keepdims=True)
     W_sample = W_sample.__div__(row_sum)
-    W_sample = tf.sparse.reorder(W_sample)  # Make sure the indices are sorted
-
+    W_sample = tf.sparse.reorder(W_sample) # Make sure the indices are sorted
+    
     # uniform_sample = tf.random.uniform((num_nodes, 1), minval=0, maxval=1)
-    cdf = tf.map_fn(
-        lambda x: map_values(
-            lambda y: tf.cumsum(y)
-            - tf.random.uniform((1,), minval=0, maxval=1, seed=seed),
-            x,
-        ),
-        W_sample,
-    )  # map to each row
+    cdf = tf.map_fn(lambda x: tf.sparse.map_values(
+        lambda y: tf.cumsum(y) - tf.random.uniform((1,), minval=0, maxval=1, seed=seed), x), 
+                    W_sample) # map to each row
     is_pos = tf.greater_equal(cdf.values, 0)
     cdf_sample = tf.sparse.retain(cdf, is_pos)
     cdf_sample = tf.sparse.reorder(cdf_sample)
-
+    
     # Materialize the samples: Take the first nonzero col of each row
-    # s_next = tf.constant([list(item)[0][1] for _, item in \
+    #s_next = tf.constant([list(item)[0][1] for _, item in \
     #    itertools.groupby(cdf_sample.indices.numpy(), lambda x: x[0])])
     # Casting to csr matrix
-    index = cdf_sample.indices  # assuming sorted already
-    indices = tf.concat(
-        [tf.constant([1], dtype="int64"), index[1:, 0] - index[:-1, 0]], axis=0
-    )
+    index = cdf_sample.indices # assuming sorted already
+    indices = tf.concat([tf.constant([1], dtype="int64"), 
+                         index[1:, 0] - index[:-1, 0]], axis=0)
     s_next = index[:, 1][tf.greater(indices, 0)]
-
+    
+    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
+    
     return W_sample, cdf, cdf_sample, s_next
+    
 
-
-def random_walk_sampling_step_tf(
-    W: tf.SparseTensor,
-    s0: tf.Tensor,
-    s1: tf.Tensor,
-    p: float,
-    q: float,
-    seed: int = None,
-):
-    """
-    Perform a 1-step sample of random walk.
-
-    Parameters
-    ----------
-    W : tf.SparseTensor
-        Adjacency weight matrix of the graph.
-    s0 : tf.Tensor
-        An array of samples (indices of nodes) in the prior step.
-    s1 : tf.Tensor
-        An array of samples (indices of nodes) in the current step.
-    p : float
-        node2vec Return Parameter
-    q : float
-        node2vec In-Out Parameter
-    seed : int
-        Sampling seed. The default is None.
-
-    Returns
-    -------
-    W_sample : tf.SparseTensor
-        The weight matrix used for sampling
-    cdf : tf.SparseTensor
-        The cumulative probability density matrix after
-        subtracting the random uniform.
-    cdf_sample : tf.SparseTensor
-        The cumulative weight matrix after masking any
-        negative values from cdf.
-    s_next: tf.Tensor
-        An array of samples (indices of nodes) drawn for the next step.
-    """
+def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     # Get dimension
     num_nodes = W.shape[0]
 
     # alpha_1 / P
-    P = tf.sparse.SparseTensor(
-        tf.cast(
-            tf.stack([tf.range(num_nodes, dtype="int64"), s0], axis=1), dtype="int64"
-        ),
-        tf.ones(num_nodes),
-        dense_shape=(num_nodes, num_nodes),
-    )
-
+    P = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s0], axis=1), dtype="int64"), 
+                               tf.ones(num_nodes), 
+                               dense_shape=(num_nodes, num_nodes))
     # alpha_2 / R
-    A_0 = tf.sparse.SparseTensor(
-        W.indices, tf.ones(W.indices.shape[0], dtype="float32"), dense_shape=W.shape
-    )
+    A_0 = tf.cast(tf.sparse.map_values(tf.ones_like, W), "float32")
     A_i_1 = tf_sparse_multiply(P, A_0)
 
-    I = tf.sparse.SparseTensor(
-        tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"),
-        tf.ones(num_nodes),
-        dense_shape=(num_nodes, num_nodes),
-    )  # permutation matrix
+    I = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"), 
+                               tf.ones(num_nodes), 
+                               dense_shape=(num_nodes, num_nodes)) # permutation matrix
     A_i = tf_sparse_multiply(I, A_0)
 
     ## intersection
@@ -182,58 +117,26 @@ def random_walk_sampling_step_tf(
     Q = tf.sparse.retain(Q, is_nonzero)
 
     # Combine to get the final weight
-    W_sample = tf.sparse.add(P.__mul__(tf.constant([1 / p], dtype="float32")), R)
-    W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1 / q], dtype="float32")))
+    W_sample = tf.sparse.add(P.__mul__(tf.constant([1/p], dtype="float32")), R)
+    W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1/q], dtype="float32")))
     is_nonzero = tf.not_equal(W_sample.values, 0)
     W_sample = tf.sparse.retain(W_sample, is_nonzero)
-    W_sample = tf.sparse.reorder(W_sample)
 
     # Make sure the orders of indices are the same
+    W_sample = tf.sparse.reorder(W_sample)
     W_new = tf_sparse_multiply(I, tf.cast(tf.sparse.reorder(W), dtype="float32"))
     W_new = tf.sparse.reorder(W_new)
 
     # Multiply the weights by creating a new sparse matrix
-    W_sample = tf.sparse.SparseTensor(
-        W_sample.indices,
-        tf.multiply(W_sample.values, W_new.values),
-        dense_shape=W_sample.shape,
-    )
+    W_sample = tf.sparse.map_values(tf.multiply, W_sample, W_new)
 
     # Taking samples from the sparse matrix
     W_sample, cdf, cdf_sample, s_next = sample_from_sparse_tf(W_sample, seed=seed)
-
+    
     return W_sample, cdf, cdf_sample, s_next
 
 
 def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
-    """
-    Sample 1 full iteration of the random walk.
-
-    Parameters
-    ----------
-    W : tf.sparse.SparseTensor
-        Weighted adjacency matrix of the graph.
-    p : float
-        node2vec Return Parameter
-    q : float
-        node2vec In-Out Parameter
-    walk_length : int, optional
-        Number of steps to take in the random walk,
-        by default 80
-    symmetrify : bool, optional
-        Whether or not symmetrify the adjacency matrix, which
-        equivalent turns the graph into an undirected graph,
-        by default True
-    seed : int
-        Sampling seed. The default is None.
-
-    Returns
-    -------
-    tf.Tensor
-        A sample of the random walk of size (num_nodes, walk_length)
-        where num_nodes is the number of rows / col of the square
-        adjacency matrix W.
-    """
     W = tf.cast(W, "float32")
     if symmetrify:
         W = tf.sparse.maximum(W, tf.sparse.transpose(W))
@@ -262,14 +165,12 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
 
     # First step
     s0 = tf.range(W.shape[0], dtype="int64")
-    W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse_tf(W)
+    W_sample_1, cdf_1, cdf_sample_1, s1 = sample_from_sparse_tf(W, seed=seed)
     S = [s0, s1]
                   
-    logging.info(f"check length: s0={len(s0)}, s1={len(s1)}")
-
     for i in range(walk_length - 1):
         _, _, _, s_next = random_walk_sampling_step_tf(
-            W, S[-2], S[-1], p, q, seed=seed + i if seed is not None else None
+            W, S[-2], S[-1], p, q, seed=(seed + i + 1) if seed is not None else None
         )
         S.append(s_next)
 

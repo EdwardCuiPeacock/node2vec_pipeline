@@ -120,9 +120,9 @@ def _create_sampled_training_data(
     [type]
         [description]
     """
-    #import psutil
-    #total_memory = psutil.virtual_memory().total / 1E9
-    #logging.info(f"Total memory: {total_memory} GB")
+    import psutil
+    total_memory = psutil.virtual_memory().total / 1E9
+    logging.info(f"Total memory: {total_memory} GB")
     
     dataset_iterable = _read_transformed_dataset(
         file_pattern, data_accessor, tf_transform_output

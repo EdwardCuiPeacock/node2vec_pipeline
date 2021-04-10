@@ -265,6 +265,9 @@ def test_sample_1_iteration_tf():
 
 # %%
 def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=True):
+    epsilon = np.finfo(np.float32).eps
+    W_sample.data = np.clip(W_sample.data, epsilon, np.finfo(np.float32).max)
+    
     num_nodes = W_sample.shape[0]
     # Normalize for each row
     row_sum = np.asarray(W_sample.sum(axis=1)).ravel() # dense
@@ -292,7 +295,7 @@ def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=True):
     uniform_sample = rs.uniform(low=0.0, high=0.999, size=num_nodes)  # [0, 1)
     cdf.data -= np.take(uniform_sample, cdf.row)
     # remove any negative
-    samp_ind = cdf.data >= 0
+    samp_ind = cdf.data >= -epsilon
     cdf.data = cdf.data[samp_ind]
     cdf.row = cdf.row[samp_ind]
     cdf.col = cdf.col[samp_ind]
@@ -336,6 +339,7 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
     return W_sample, cdf, s_next
 
 def preproc_W_numpy(W, symmetrify=True):
+    W = W.astype("float64")
     if symmetrify:
         W = W.maximum(W.transpose()).tocoo()
     # Make sure each row has at least 1 entry

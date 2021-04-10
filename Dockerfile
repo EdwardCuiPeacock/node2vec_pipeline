@@ -2,4 +2,4 @@ FROM tensorflow/tfx:0.26.0
 WORKDIR /pipeline
 COPY ./ ./
 ENV PYTHONPATH="/pipeline:${PYTHONPATH}"
-RUN pip install --no-cache-dir psutil tensorflow==2.4.1
+RUN pip install --no-cache-dir psutil tensorflow==2.4.1 numpy==1.19.2 scipy==1.5.2 

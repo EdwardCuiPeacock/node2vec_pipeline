@@ -324,6 +324,12 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
     A_0 = W.copy().tocsc()
     A_0.data[:] = 1
     R = A_0[s1, :].multiply(A_0[s0, :]) # elementwise multiply
+    
+    aa_shape = A_0[s1, :].shape
+    logging.info(f"Shape: A_0[s1, :]= {aa_shape}")
+    logging.info(f"Shape: P={P.shape}")
+    logging.info(f"Shape: R={R.shape}")
+    
     # alpha_3 / Q
     Q = A_0[s1, :] - P - R
     A_0 = None # free some memory

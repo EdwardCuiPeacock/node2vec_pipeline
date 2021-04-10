@@ -131,27 +131,27 @@ def _create_sampled_training_data(
     logging.info(dataset_iterable)
     # Iterate over the batches and build the final dict
     dataset = {"indices": [], "weight": []}
-    #pandas_data = {"InSeasonSeries_Id":[], "token":[], "weight":[]}
+    pandas_data = {"InSeasonSeries_Id":[], "token":[], "weight":[]}
     for batch_data in dataset_iterable:
         dataset["indices"].append(
             tf.concat([batch_data["InSeasonSeries_Id"], batch_data["token"]], axis=1)
         )
         dataset["weight"].append(batch_data["weight"])
 
-    #    pandas_data["InSeasonSeries_Id"].append(batch_data["InSeasonSeries_Id"].numpy().ravel())
-    #    pandas_data["token"].append(batch_data["token"].numpy().ravel())
-    #    pandas_data["weight"].append(batch_data["weight"].numpy().ravel())
+        pandas_data["InSeasonSeries_Id"].append(batch_data["InSeasonSeries_Id"].numpy().ravel())
+        pandas_data["token"].append(batch_data["token"].numpy().ravel())
+        pandas_data["weight"].append(batch_data["weight"].numpy().ravel())
 
-    # pandas_data = {k: list(map(float,list(np.concatenate(v, axis=0)))) for k, v in pandas_data.items()}
+    pandas_data = {k: list(map(float,list(np.concatenate(v, axis=0)))) for k, v in pandas_data.items()}
     
-    #from google.cloud import storage
-    #import json
-    #client = storage.client.Client(project="res-nbcupea-dev-ds-sandbox-001")
-    #bucket = client.get_bucket("edc-dev")
-    #blob = bucket.blob("output_pandas.json")
-    #blob.upload_from_string(data=json.dumps(pandas_data), 
-    #                       content_type="application/json")
-    #logging.info(f"Saved pandas dataframe at bucket base")
+    from google.cloud import storage
+    import json
+    client = storage.client.Client(project="res-nbcupea-dev-ds-sandbox-001")
+    bucket = client.get_bucket("edc-dev")
+    blob = bucket.blob("output_pandas_20210410.json")
+    blob.upload_from_string(data=json.dumps(pandas_data), 
+                           content_type="application/json")
+    logging.info(f"Saved pandas dataframe at bucket base")
 
     # Merge into a single tensor
     dataset = {k: tf.concat(v, axis=0) for k, v in dataset.items()}

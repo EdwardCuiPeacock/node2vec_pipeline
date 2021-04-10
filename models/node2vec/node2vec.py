@@ -263,12 +263,12 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
                     (np.arange(num_nodes), s0))
                   ).tocsc()
     # alpha_2 / R
-    A_i = W.copy().tocsc()
-    A_i.data[:] = 1
-    R = A_i[s1, :].multiply(A_i[s0, :]) # elementwise multiply
+    A_0 = W.copy().tocsc()
+    A_0.data[:] = 1
+    R = A_0[s1, :].multiply(A_0[s0, :]) # elementwise multiply
     # alpha_3 / Q
-    Q = A_i[s1, :] - P - R
-    A_i = None # free some memory
+    Q = A_0[s1, :] - P - R
+    A_0 = None # free some memory
     
     # Combine to get the final weight
     W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W.tocsc()[s1, :])

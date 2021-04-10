@@ -5,7 +5,7 @@ Created on Thu Mar 25 10:40:11 2021
 
 @author: edwardcui
 """
-
+import gc
 import numpy as np
 import pandas as pd
 import scipy.sparse
@@ -264,7 +264,7 @@ def test_sample_1_iteration_tf():
     assert np.all(np.array(list(map(len, S))) == num_nodes)
 
 # %%
-def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=True):
+def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=False):
     epsilon = np.finfo(np.float32).eps
     W_sample.data = np.clip(W_sample.data, epsilon, np.finfo(np.float32).max)
     
@@ -313,12 +313,17 @@ def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=True):
     return W_sample, cdf, s_next
     
 
-def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
+def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     """Take 1 step of the random walk, with numpy / scipy.sparse."""
+    if DBUG:
+        logging.info("Start random walk")
+        logging.info(f"s0={s0.shape}")
+        logging.info(f"s1={s1.shape}")
     num_nodes = W.shape[0]
     # alpha_1 / P
     P = coo_matrix((np.ones(num_nodes), 
-                    (np.arange(num_nodes), s0))
+                    (np.arange(num_nodes), s0)), 
+                   shape=(num_nodes, num_nodes),
                   ).tocsc()
     # alpha_2 / R
     A_0 = W.copy().tocsc()
@@ -326,14 +331,17 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
     A_i = A_0[s1, :]
     R = A_i.multiply(A_0[s0, :]) # elementwise multiply
     
-    logging.info(f"Shape: A_i={A_i.shape}")
-    logging.info(f"Shape: P={P.shape}")
-    logging.info(f"Shape: R={R.shape}")
+    if DEBUG:
+        logging.info(f"Shape: A_i={A_i.shape}")
+        logging.info(f"Shape: P={P.shape}")
+        logging.info(f"Shape: R={R.shape}")
     
     # alpha_3 / Q
     Q = A_i - P - R
+    del A_i # free some memory
     del A_0 # free some memory
-    logging.info(f"Shape: Q={Q.shape}")
+    if DEBUG:
+        logging.info(f"Shape: Q={Q.shape}")
     
     # Combine to get the final weight
     W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W.tocsc()[s1, :])
@@ -374,6 +382,7 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
             W, S[-2], S[-1], p, q, seed=(seed + 1 + i) if seed is not None else None
         )
         S.append(s_next)
+        gc.collect()
 
     # for ii, ss in enumerate(S):  # verbose print
     #     logging.info(f"s{ii}: {ss}")
@@ -430,9 +439,27 @@ def test_permutation_matrix():
     
     
 if __name__ == '__main__':
-   #test_sample_1_iteration_tf()
-   test_sample_1_iteration_numpy()
-   pass 
+    #test_sample_1_iteration_tf()
+    #test_sample_1_iteration_numpy()
+    import json
+    df = json.load(open("/Users/edwardcui/Downloads/output_pandas_20210410.json", "r"))
+    df = pd.DataFrame(df)
+    df["InSeasonSeries_Id"] = df["InSeasonSeries_Id"].astype(int)
+    df["token"] = df["token"].astype(int)
+    df = df.loc[(df["InSeasonSeries_Id"] > -0.5) & (df["token"] >-0.5), :]
+    
+    num_nodes = int(np.max(df.values) + 1)
+    walk_length = 3
+    
+    W = coo_matrix((df["weight"].values, (df["InSeasonSeries_Id"].values, 
+                                           df["token"].values)), 
+                    dtype=np.float64, shape=(num_nodes, num_nodes))
+    W = W.tocsc().tocoo()
+    W = preproc_W_numpy(W)
+    
+    S = sample_1_iteration_numpy(W, p=0.2, q=0.8, walk_length=walk_length, seed=42)
+   
+    pass 
    
 
     

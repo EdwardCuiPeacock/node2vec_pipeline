@@ -346,7 +346,7 @@ def run_fn(fn_args):
     logging.info("See if GPU is available")
     logging.info(tf.config.list_physical_devices("GPU"))
 
-    logging.info(f"Tensorflow version: {tf.__version}")
+    logging.info(f"Tensorflow version: {tf.__version__}")
 
     # Get some parameters
     system_config = fn_args.custom_config["system_config"]

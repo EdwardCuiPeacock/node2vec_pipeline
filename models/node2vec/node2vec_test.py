@@ -323,21 +323,24 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
     # alpha_2 / R
     A_0 = W.copy().tocsc()
     A_0.data[:] = 1
-    R = A_0[s1, :].multiply(A_0[s0, :]) # elementwise multiply
+    A_i = A_0[s1, :]
+    R = A_i.multiply(A_0[s0, :]) # elementwise multiply
     
-    aa_shape = A_0[s1, :].shape
-    logging.info(f"Shape: A_0[s1, :]= {aa_shape}")
+    logging.info(f"Shape: A_i={A_i.shape}")
     logging.info(f"Shape: P={P.shape}")
     logging.info(f"Shape: R={R.shape}")
     
     # alpha_3 / Q
-    Q = A_0[s1, :] - P - R
-    A_0 = None # free some memory
+    Q = A_i - P - R
+    del A_0 # free some memory
+    logging.info(f"Shape: Q={Q.shape}")
     
     # Combine to get the final weight
     W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W.tocsc()[s1, :])
     #print(W_sample.toarray())
-    P, Q, R = None, None, None # free some memory
+    del P
+    del Q
+    del R
     
     # Make sure the rows are sorted
     W_sample, cdf, s_next = sample_from_sparse_numpy(W_sample, seed=None)

@@ -8,6 +8,10 @@ Created on Thu Mar 25 10:40:11 2021
 import gc
 #from line_profiler import LineProfiler
 #from memory_profiler import profile as mem_profile
+#import tracemalloc
+#from collections import OrderedDict
+#snapshots = OrderedDict()
+
 import numpy as np
 import pandas as pd
 import scipy.sparse
@@ -322,15 +326,24 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
         logging.info(f"s1={s1.shape}")
     num_nodes = W.shape[0]
     # alpha_1 / P
+    #tracemalloc.start()
+    #snapshots["Begin"] = tracemalloc.take_snapshot()
     P = coo_matrix((np.ones(num_nodes), 
                     (np.arange(num_nodes), s0)), 
                    shape=(num_nodes, num_nodes),
-                  ).tocsc()
+                  ).tocsr()
+    #snapshots["After creating P"] = tracemalloc.take_snapshot()
+
     # alpha_2 / R
-    A_0 = W.copy().tocsc()
-    A_0.data[:] = 1
+    A_0 = W.copy().tocsr()
+    A_0.data = np.ones_like(A_0.data, dtype=int)
+    #snapshots["After creating A_0"] = tracemalloc.take_snapshot()
+
     A_i = A_0[s1, :]
+    #snapshots["After creating A_i"] = tracemalloc.take_snapshot()
+
     R = A_i.multiply(A_0[s0, :]) # elementwise multiply
+    #snapshots["After creating R"] = tracemalloc.take_snapshot()
     
     if DEBUG:
         logging.info(f"Shape: A_i={A_i.shape}")
@@ -339,20 +352,23 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     
     # alpha_3 / Q
     Q = A_i - P - R
+    #snapshots["After creating Q"] = tracemalloc.take_snapshot()
     del A_i # free some memory
     del A_0 # free some memory
     if DEBUG:
         logging.info(f"Shape: Q={Q.shape}")
-    
+    #snapshots["After deleting A_i, A_0"] = tracemalloc.take_snapshot()
     # Combine to get the final weight
-    W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W.tocsc()[s1, :])
+    W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W.tocsr()[s1, :])
+    #snapshots["After create W_sample"] = tracemalloc.take_snapshot()
     #print(W_sample.toarray())
     del P
     del Q
     del R
-    
+    #snapshots["After deleting P, Q, R"] = tracemalloc.take_snapshot()
     # Make sure the rows are sorted
     W_sample, cdf, s_next = sample_from_sparse_numpy(W_sample, seed=None)
+    #snapshots["After taking sample"] = tracemalloc.take_snapshot()
     
     return W_sample, cdf, s_next
 
@@ -473,8 +489,14 @@ if __name__ == '__main__':
     
     
     #S = sample_1_iteration_numpy(W, p=0.2, q=0.8, walk_length=walk_length, seed=42)
-   
-    pass 
+    #%%
+    # j, i = 3, 2
+    # top_stats = list(snapshots.values())[j].compare_to(list(snapshots.values())[i], 'lineno')
+    # key_j, key_i = list(snapshots.keys())[j], list(snapshots.keys())[i]
+    # print(f"Between {key_j} vs. {key_i}")
+    # print("Top 10 diferences")
+    # for stat in top_stats[:10]:
+    #     print(stat) 
    
 
     

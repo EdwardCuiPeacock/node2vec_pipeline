@@ -14,10 +14,13 @@ import tensorflow as tf
 import tensorflow_transform as tft
 
 from models.node2vec.node2vec import (
-    sample_1_iteration_tf,
-    sample_1_iteration_numpy,
     generate_skipgram_beam,
     build_keras_model,
+)
+
+from models.node2vec.node2vec_test import (
+    sample_1_iteration_tf,
+    sample_1_iteration_numpy,
 )
 
 from tfx_bsl.tfxio import dataset_options

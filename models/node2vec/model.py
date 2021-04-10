@@ -178,8 +178,10 @@ def _create_sampled_training_data(
     #W = tf.sparse.SparseTensor(
     #    dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes)
     #)
-    W = coo_matrix((dataset["weight"].numpy(), (dataset["indices"][:, 0].numpy(), 
-            dataset["indices"][:, 1].numpy())), shape=(num_nodes, num_nodes))
+    W = coo_matrix((dataset["weight"].numpy(),
+            (dataset["indices"][:, 0].numpy().astype(np.int32), 
+            dataset["indices"][:, 1].numpy().astype(np.int32))), 
+            shape=(num_nodes, num_nodes))
     
     # Check to see if all rows have at least 1 neighbor
     #assert bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)), "not all rows have at least 1 neighbor"

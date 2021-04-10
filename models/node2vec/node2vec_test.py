@@ -6,6 +6,8 @@ Created on Thu Mar 25 10:40:11 2021
 @author: edwardcui
 """
 import gc
+#from line_profiler import LineProfiler
+#from memory_profiler import profile as mem_profile
 import numpy as np
 import pandas as pd
 import scipy.sparse
@@ -136,7 +138,6 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=True):
     logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
     
     return W_sample, cdf, cdf_sample, s_next
-
 
 def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     # Get dimension
@@ -312,10 +313,10 @@ def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=False):
     
     return W_sample, cdf, s_next
     
-
+#@mem_profile
 def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     """Take 1 step of the random walk, with numpy / scipy.sparse."""
-    if DBUG:
+    if DEBUG:
         logging.info("Start random walk")
         logging.info(f"s0={s0.shape}")
         logging.info(f"s1={s1.shape}")
@@ -375,6 +376,7 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
     # First step
     s0 = np.arange(W.shape[0])
     W_sample_1, cdf_1, s1 = sample_from_sparse_numpy(W, seed=seed)
+    gc.collect()
     S = [s0, s1]
 
     for i in range(walk_length - 1):
@@ -457,7 +459,20 @@ if __name__ == '__main__':
     W = W.tocsc().tocoo()
     W = preproc_W_numpy(W)
     
-    S = sample_1_iteration_numpy(W, p=0.2, q=0.8, walk_length=walk_length, seed=42)
+    
+    s0 = np.arange(W.shape[0])
+    W_sample_1, cdf_1, s1 = sample_from_sparse_numpy(W, seed=42)
+    S = [s0, s1]
+    
+    random_walk_sampling_step_numpy(W, s0, s1, p=0.2, q=0.8, seed=42)
+    
+    # lp = LineProfiler()
+    # lp_wrapper = lp(random_walk_sampling_step_numpy)
+    # lp_wrapper(W, s0, s1, p=0.2, q=0.8, seed=42)
+    # lp.print_stats()
+    
+    
+    #S = sample_1_iteration_numpy(W, p=0.2, q=0.8, walk_length=walk_length, seed=42)
    
     pass 
    

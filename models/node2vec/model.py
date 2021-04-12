@@ -245,8 +245,7 @@ def _create_sampled_training_data(
     logging.info("Generate Skipgrams")
     for phase in ["train", "eval"]:
         cur_seed = (cur_seed + 1) if seed is not None else None
-        sample_metadata[phase]["skipgram_uri_list"],
-        sample_metadata[phase]["data_size"] = generate_skipgram_beam(
+        saved_results, num_rows_saved = generate_skipgram_beam(
             sample_metadata[phase]["random_walk_uri_list"],
             vocabulary_size=num_nodes,
             window_size=window_size,
@@ -257,6 +256,9 @@ def _create_sampled_training_data(
             temp_dir=temp_dir,
             beam_pipeline_args=beam_pipeline_args,
         )
+
+        sample_metadata[phase]["skipgram_uri_list"] = saved_results
+        sample_metadata[phase]["data_size"] = num_rows_saved
 
     train_data_uri_list = sample_metadata["train"]["skipgram_uri_list"]
     train_data_size = sample_metadata["train"]["data_size"]

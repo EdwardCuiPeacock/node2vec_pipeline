@@ -218,7 +218,7 @@ def _create_sampled_training_data(
             cur_seed = (
                 (
                     seed
-                    + (r + (train_repetitions if phase == "train" else 0)) * walk_length
+                    + (r + (train_repetitions if phase == "eval" else 0)) * walk_length
                 )
                 if seed is not None
                 else None
@@ -411,7 +411,7 @@ def run_fn(fn_args):
         train_repetitions=model_config["train_repetitions"],
         eval_repetitions=model_config["eval_repetitions"],
         seed=model_config["seed"],
-        beam_pipeline_args=system_config["DATAFLOW_BEAM_PIPELINE_ARGS"]["temp_location"],
+        beam_pipeline_args=system_config["DATAFLOW_BEAM_PIPELINE_ARGS"],
     )
 
     # Load the created dataset
@@ -423,7 +423,7 @@ def run_fn(fn_args):
         shuffle=True,
         seed=model_config["seed"],
     )
-    eval_batch_size = model_config.get("eval_batch_size") or train_batch_size
+    eval_batch_size = model_config.get("eval_batch_size", train_batch_size)
     eval_dataset = _input_fn(
         eval_data_uri_list,
         batch_size=eval_batch_size,  # default to train batch_size

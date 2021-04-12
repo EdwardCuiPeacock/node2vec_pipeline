@@ -493,4 +493,4 @@ def run_fn(fn_args):
 
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})
 
-    # raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))
+    raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))

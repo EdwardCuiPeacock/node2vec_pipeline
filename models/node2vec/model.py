@@ -301,7 +301,7 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
         SkipGram training dataset of ((target, context), label)
     """
     feature_spec = {
-        kk: tf.io.FixedLenFeature([], dtype=tf.int64)
+        kk: tf.io.FixedLenFeature([], dtype=tf.int32)
         for kk in ["target", "context", "label"]
     }
 

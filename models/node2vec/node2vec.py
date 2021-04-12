@@ -610,9 +610,9 @@ class SkipGram(tf.keras.Model):
             self.negatives = Lambda(
                 lambda x: K.random_uniform(
                     (K.shape(x)[0], num_neg_samples),
-                    minval=tf.cast(0, "int64"),
-                    maxval=tf.cast(vocab_size, "int64"),
-                    dtype="int64",
+                    minval=0,
+                    maxval=vocab_size,
+                    dtype="int32",
                 ),
                 name="negative_sampling",
             )
@@ -662,9 +662,9 @@ class SkipGram(tf.keras.Model):
 
     def model(self):
         """Construct the model."""
-        x = Input(shape=(1,), dtype="int64", name="target")
+        x = Input(shape=(1,), dtype="int32", name="target")
         if self.num_neg_samples > 0:
-            y = Input(shape=(1,), dtype="int64", name="context")
+            y = Input(shape=(1,), dtype="int32", name="context")
             return tf.keras.Model(inputs=[x, y], outputs=self.call([x, y]))
         else:
             return tf.keras.Model(inputs=x, outputs=self.call(x))

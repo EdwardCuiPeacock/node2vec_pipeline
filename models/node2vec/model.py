@@ -16,15 +16,15 @@ import tensorflow_transform as tft
 from models.node2vec.node2vec import (
     generate_skipgram_beam,
     build_keras_model,
+    sample_1_iteration_numpy
 )
 
-from models.node2vec.node2vec_test import (
-    sample_1_iteration_tf,
-    sample_1_iteration_numpy,
-)
+#from models.node2vec.node2vec_test import (
+#    sample_1_iteration_tf,
+#    sample_1_iteration_numpy,
+#)
 
 from tfx_bsl.tfxio import dataset_options
-
 
 def _read_transformed_dataset(
     file_pattern,

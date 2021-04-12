@@ -1,7 +1,7 @@
 """Node2Vec core algorithm."""
 
 from absl import logging
-import time
+import gc
 from typing import Text, Optional, Union, Callable, List
 import numpy as np
 from tqdm import tqdm
@@ -256,63 +256,103 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
 
 
 # %% Numpy implementation of sampling
-def sample_from_sparse_numpy(W_sample, seed=None):
+def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=False):
+    epsilon = np.finfo(np.float32).eps
+    W_sample.data = np.clip(W_sample.data, epsilon, np.finfo(np.float32).max)
+
     num_nodes = W_sample.shape[0]
     # Normalize for each row
     row_sum = np.asarray(W_sample.sum(axis=1)).ravel()  # dense
     W_sample = W_sample.tocoo()
     W_sample.data /= np.take(row_sum, W_sample.row)
 
+    if DEBUG:
+        check = np.min(W_sample.sum(axis=1))
+        logging.info(f"Sum of row is around 1: {check}")
+
     # Compute cdf cumsum with csr matrix
-    cdf = W_sample.copy().tocsr()
+    cdf = W_sample.copy().tocsr()  # ordered by row
     cdf.data = np.cumsum(cdf.data)
+
     cdf = cdf.tocoo()
     # Subtract each row by broadcasting
     cdf.data = cdf.data - cdf.row
 
+    if DEBUG:
+        check = np.min(cdf.max(axis=1).todense())
+        logging.info(f"cdf each row has greatest value around 1: {check}")
+
     # Take the sample
     rs = np.random.RandomState(seed)
-    uniform_sample = rs.rand(num_nodes)  # [0, 1)
+    uniform_sample = rs.uniform(low=0.0, high=0.999, size=num_nodes)  # [0, 1)
     cdf.data -= np.take(uniform_sample, cdf.row)
     # remove any negative
-    samp_ind = cdf.data >= 0
+    samp_ind = cdf.data >= -epsilon
     cdf.data = cdf.data[samp_ind]
     cdf.row = cdf.row[samp_ind]
     cdf.col = cdf.col[samp_ind]
+
+    if DEBUG:
+        check = np.all(cdf.getnnz(axis=1) > 0)
+        logging.info(f"random cdf has at least 1 entry: {check}")
 
     # Slice out the column indices: starting index of each row
     cdf = cdf.tocsr()
     s_next = cdf.indices[cdf.indptr[:-1]]
 
+    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
+
     return W_sample, cdf, s_next
 
 
-def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
+def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     """Take 1 step of the random walk, with numpy / scipy.sparse."""
+    W.data = W.data.astype(np.float32)
+    if DEBUG:
+        logging.info("Start random walk")
+        logging.info(f"s0={s0.shape}")
+        logging.info(f"s1={s1.shape}")
     num_nodes = W.shape[0]
     # alpha_1 / P
-    P = coo_matrix((np.ones(num_nodes), (np.arange(num_nodes), s0))).tocsc()
+    P = coo_matrix(
+        (np.ones(num_nodes, dtype=bool), (np.arange(num_nodes), s0)),
+        shape=(num_nodes, num_nodes),
+    ).tocsr()
+
     # alpha_2 / R
-    A_0 = W.copy().tocsc()
-    A_0.data[:] = 1
-    R = A_0[s1, :].multiply(A_0[s0, :])  # elementwise multiply
+    A_0 = W.copy().tocsr()
+    A_0.data = np.ones_like(A_0.data, dtype=bool)
+
+    A_i = A_0[s1, :]
+    A_i_1 = A_0[s0, :]
+    R = A_i.multiply(A_i_1)  # elementwise multiply
+
+    if DEBUG:
+        logging.info(f"Shape: A_i={A_i.shape}")
+        logging.info(f"Shape: P={P.shape}")
+        logging.info(f"Shape: R={R.shape}")
+
     # alpha_3 / Q
-    Q = A_0[s1, :] - P - R
-    A_0 = None  # free some memory
-
+    Q = A_i - P - R
+    del A_i_1  # free some memory
+    del A_i  # free some memory
+    del A_0  # free some memory
+    if DEBUG:
+        logging.info(f"Shape: Q={Q.shape}")
     # Combine to get the final weight
-    W_sample = ((1 / p) * P + R + (1 / q) * Q).multiply(W.tocsc()[s1, :])
-    # print(W_sample.toarray())
-    P, Q, R = None, None, None  # free some memory
-
+    W_i = W.tocsr()[s1, :]
+    W_sample = ((1 / p) * P + R + (1 / q) * Q).multiply(W_i)
+    del P
+    del Q
+    del R
     # Make sure the rows are sorted
-    W_sample = W_sample.tocsr()
-    W_sample, cdf, s_next = sample_from_sparse_numpy(W_sample, seed=None)
+    W_sample, cdf, s_next = sample_from_sparse_numpy(W_sample, seed=seed)
 
     return W_sample, cdf, s_next
 
 
-def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None):
+def preproc_W_numpy(W, symmetrify=True):
+    W = W.astype("float64")
     if symmetrify:
         W = W.maximum(W.transpose()).tocoo()
     # Make sure each row has at least 1 entry
@@ -323,19 +363,24 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
         W.col = np.concatenate([W.col, indices], axis=0)
         W.data = np.concatenate([W.data, np.ones_like(indices)], axis=0)
 
+    return W
+
+
+def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None):
+    W = preproc_W_numpy(W, symmetrify)
+
     # First step
     s0 = np.arange(W.shape[0])
     W_sample_1, cdf_1, s1 = sample_from_sparse_numpy(W, seed=seed)
+    gc.collect()
     S = [s0, s1]
 
     for i in range(walk_length - 1):
         _, _, s_next = random_walk_sampling_step_numpy(
-            W, S[-2], S[-1], p, q, seed=seed + 1 + i if seed is not None else None
+            W, S[-2], S[-1], p, q, seed=(seed + 1 + i) if seed is not None else None
         )
         S.append(s_next)
-
-    # for ii, ss in enumerate(S):  # verbose print
-    #     logging.info(f"s{ii}: {ss}")
+        gc.collect()
 
     return S
 
@@ -530,7 +575,7 @@ def generate_skipgram_beam(
             transformed_dataset, transform_fn = (
                 Pipeline
                 | "Data Iterator"
-                >> (  
+                >> (
                     dataset.as_numpy_iterator(),
                     dataset_schema,
                 )

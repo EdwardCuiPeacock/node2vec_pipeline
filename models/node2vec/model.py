@@ -399,18 +399,19 @@ def run_fn(fn_args):
         eval_data_size,
         num_nodes,
     ) = _create_sampled_training_data(
-        fn_args.train_files,
-        graph_sample_path,
-        fn_args.data_accessor,
-        tf_transform_output,
-        model_config["window_size"],
-        0.0,  # not generating negative samples from the preprocessing; use softmax negative sampling
-        model_config["p"],
-        model_config["q"],
-        model_config["walk_length"],
-        model_config["train_repetitions"],
-        model_config["eval_repetitions"],
-        system_config["DATAFLOW_BEAM_PIPELINE_ARGS"]["temp_location"],
+        file_pattern=fn_args.train_files,
+        storage_path=graph_sample_path,
+        data_accessor=fn_args.data_accessor,
+        tf_transform_output=tf_transform_output,
+        window_size=model_config["window_size"],
+        negative_samples=0.0,  # not generating negative samples from the preprocessing; use softmax negative sampling
+        p=model_config["p"],
+        q=model_config["q"],
+        walk_length=model_config["walk_length"],
+        train_repetitions=model_config["train_repetitions"],
+        eval_repetitions=model_config["eval_repetitions"],
+        seed=model_config["seed"],
+        beam_pipeline_args=system_config["DATAFLOW_BEAM_PIPELINE_ARGS"]["temp_location"],
     )
 
     # Load the created dataset

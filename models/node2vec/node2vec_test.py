@@ -150,14 +150,15 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
 
     # alpha_1 / P
     P = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s0], axis=1), dtype="int64"), 
-                               tf.ones(num_nodes, dtype="float64"), 
+                               tf.ones(num_nodes, dtype="bool"), 
                                dense_shape=(num_nodes, num_nodes))
     # alpha_2 / R
-    A_0 = tf.sparse.SparseTensor(W.indices, tf.ones_like(W.values, dtype="float64"), dense_shape=W.shape)
+    # A_0 = tf.sparse.SparseTensor(W.indices, tf.ones_like(W.values, dtype="bool"), dense_shape=W.shape)
+    A_0 = tf.sparse.map_values(tf.ones_like, W)
     A_i_1 = tf_sparse_multiply(P, A_0)
 
     I = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"), 
-                               tf.ones(num_nodes, dtype="float64"), 
+                               tf.ones(num_nodes, dtype="bool"), 
                                dense_shape=(num_nodes, num_nodes)) # permutation matrix
     A_i = tf_sparse_multiply(I, A_0)
 
@@ -184,9 +185,11 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     W_new = tf.sparse.reorder(W_new)
 
     # Multiply the weights by creating a new sparse matrix
-    W_sample = tf.sparse.SparseTensor(W_sample.indices, 
-                                      W_sample.values * W_new.values,
-                                      dense_shape=W_sample.shape)
+    #W_sample = tf.sparse.SparseTensor(W_sample.indices, 
+    #                                  W_sample.values * W_new.values,
+    #                                  dense_shape=W_sample.shape)
+    W_sample = tf.sparse.map_values(tf.multiply, W_sample, W_new)
+
 
     # Taking samples from the sparse matrix
     W_sample, cdf, cdf_sample, s_next = sample_from_sparse_tf(W_sample, seed=seed)

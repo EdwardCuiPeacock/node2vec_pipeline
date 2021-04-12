@@ -29,26 +29,27 @@ from tensorflow_transform.tf_metadata import schema_utils
 # %% Core module for node2vec sampling
 def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
     a_sm = sparse_csr_matrix_ops.sparse_tensor_to_csr_sparse_matrix(
-        a.indices, a.values, a.dense_shape)
+        a.indices, a.values, a.dense_shape
+    )
 
     b_sm = sparse_csr_matrix_ops.sparse_tensor_to_csr_sparse_matrix(
-        b.indices, b.values, b.dense_shape)
+        b.indices, b.values, b.dense_shape
+    )
 
     c_sm = sparse_csr_matrix_ops.sparse_matrix_sparse_mat_mul(
-        a=a_sm, b=b_sm, type="float64")
+        a=a_sm, b=b_sm, type="float64"
+    )
 
-    c = sparse_csr_matrix_ops.csr_sparse_matrix_to_sparse_tensor(
-        c_sm, "float64")
+    c = sparse_csr_matrix_ops.csr_sparse_matrix_to_sparse_tensor(c_sm, "float64")
 
-    return tf.SparseTensor(
-        c.indices, c.values, dense_shape=c.dense_shape)
+    return tf.SparseTensor(c.indices, c.values, dense_shape=c.dense_shape)
 
-    
+
 def preproc_W(W, symmetrify=True):
     W = tf.cast(W, "float64")
     if symmetrify:
-        W = tf.sparse.maximum(W, tf.sparse.transpose(W)) # symmetrify
-    
+        W = tf.sparse.maximum(W, tf.sparse.transpose(W))  # symmetrify
+
     if not bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)):
         indices = tf.sparse.to_dense(
             tf.sets.difference(
@@ -66,82 +67,105 @@ def preproc_W(W, symmetrify=True):
 def sample_from_sparse_tf(W_sample, seed=None, DEBUG=False):
     """Take a sample given unnormalized weight matrix."""
     # Make sure the minimum value of the sampling weight matrix is not zero
-    epsilon=1E-7
-    W_sample = tf.sparse.SparseTensor(W_sample.indices, 
-                                      tf.clip_by_value(W_sample.values, 
-                                                       epsilon, 
-                                                       tf.float32.max),
-                                      W_sample.shape)
-    
+    epsilon = 1e-7
+    W_sample = tf.sparse.SparseTensor(
+        W_sample.indices,
+        tf.clip_by_value(W_sample.values, epsilon, tf.float32.max),
+        W_sample.shape,
+    )
+
     if DEBUG:
         check = bool(tf.reduce_min(W_sample.values) > 0)
         logging.info(f"All W_sample values are positive before normalization: {check}")
-    
+
     # Normalize each row
     row_sum = tf.sparse.reduce_sum(W_sample, axis=1, keepdims=False)
-    normalized_values = tf.divide(W_sample.values, tf.gather(row_sum, W_sample.indices[:, 0]))
-    W_sample = tf.sparse.SparseTensor(W_sample.indices, normalized_values, W_sample.shape)
-    W_sample = tf.sparse.reorder(W_sample) # Make sure the indices are sorted
-    
+    normalized_values = tf.divide(
+        W_sample.values, tf.gather(row_sum, W_sample.indices[:, 0])
+    )
+    W_sample = tf.sparse.SparseTensor(
+        W_sample.indices, normalized_values, W_sample.shape
+    )
+    W_sample = tf.sparse.reorder(W_sample)  # Make sure the indices are sorted
+
     if DEBUG:
         check = bool(tf.reduce_min(W_sample.values) > 0)
         logging.info(f"All W_sample values are positive after normalization: {check}")
-        
+
         check = float(tf.reduce_min(tf.sparse.reduce_sum(W_sample, axis=1)))
-        logging.info(f"Min value of row sum after normalization (expected to be 1) {check}")
-            
+        logging.info(
+            f"Min value of row sum after normalization (expected to be 1) {check}"
+        )
+
     # Compute the CDF row-wise
-    sample_values = tf.cumsum(W_sample.values) - tf.cast(W_sample.indices[:, 0], "float64")
-    cdf = tf.sparse.SparseTensor(W_sample.indices, sample_values, dense_shape=W_sample.shape)
+    sample_values = tf.cumsum(W_sample.values) - tf.cast(
+        W_sample.indices[:, 0], "float64"
+    )
+    cdf = tf.sparse.SparseTensor(
+        W_sample.indices, sample_values, dense_shape=W_sample.shape
+    )
     cdf = tf.sparse.reorder(cdf)
-    
+
     if DEBUG:
         check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0.999))
         logging.info(f"All cdf rows cumulative of 1: {check}")
-    
+
     # Use Inverse Trasnform sampling on the sparse matrix
-    values_random = tf.random.uniform((cdf.shape[0], ), minval=0, maxval=0.999, dtype="float64", seed=seed)
+    values_random = tf.random.uniform(
+        (cdf.shape[0],), minval=0, maxval=0.999, dtype="float64", seed=seed
+    )
     sample_values = cdf.values - tf.gather(values_random, cdf.indices[:, 0])
     cdf = tf.sparse.SparseTensor(cdf.indices, sample_values, dense_shape=cdf.shape)
     cdf = tf.sparse.reorder(cdf)
-    
+
     if DEBUG:
-        missing_rows = tf.sparse.to_dense(
+        missing_rows = (
+            tf.sparse.to_dense(
                 tf.sets.difference(
-                    [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf.indices[:, 0]).y]
+                    [tf.range(W_sample.shape[0], dtype="int64")],
+                    [tf.unique(cdf.indices[:, 0]).y],
                 )
-            ).numpy().tolist()
-        
+            )
+            .numpy()
+            .tolist()
+        )
+
         logging.info(f"random df missing rows: {missing_rows}")
-        
+
         check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0))
         logging.info(f"All random cdf rows have some positive values: {check}")
-    
+
     # Remove negative values
     is_pos = tf.greater_equal(cdf.values, -epsilon)
     cdf_sample = tf.sparse.retain(cdf, is_pos)
     cdf_sample = tf.sparse.reorder(cdf_sample)
-    
+
     if DEBUG:
-        missing_rows = tf.sparse.to_dense(
-               tf.sets.difference(
-                   [tf.range(W_sample.shape[0], dtype="int64")], [tf.unique(cdf_sample.indices[:, 0]).y]
-               )
-           ).numpy().tolist()
-         
+        missing_rows = (
+            tf.sparse.to_dense(
+                tf.sets.difference(
+                    [tf.range(W_sample.shape[0], dtype="int64")],
+                    [tf.unique(cdf_sample.indices[:, 0]).y],
+                )
+            )
+            .numpy()
+            .tolist()
+        )
+
         logging.info(f"cdf_sample missing rows: {missing_rows}")
-    
+
     # Materialize the samples: Take the first nonzero col of each row
     # s_next = tf.constant([list(item)[0][1] for _, item in \
     #    itertools.groupby(cdf_sample.indices.numpy(), lambda x: x[0])])
     # Casting to csr matrix
-    index = cdf_sample.indices # assuming sorted already
-    indices = tf.concat([tf.constant([1], dtype="int64"), 
-                         index[1:, 0] - index[:-1, 0]], axis=0)
+    index = cdf_sample.indices  # assuming sorted already
+    indices = tf.concat(
+        [tf.constant([1], dtype="int64"), index[1:, 0] - index[:-1, 0]], axis=0
+    )
     s_next = index[:, 1][tf.greater(indices, 0)]
-    
+
     logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
-    
+
     return W_sample, cdf, cdf_sample, s_next
 
 
@@ -150,16 +174,24 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     num_nodes = W.shape[0]
 
     # alpha_1 / P
-    P = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s0], axis=1), dtype="int64"), 
-                               tf.ones(num_nodes, dtype="float64"), 
-                               dense_shape=(num_nodes, num_nodes))
+    P = tf.sparse.SparseTensor(
+        tf.cast(
+            tf.stack([tf.range(num_nodes, dtype="int64"), s0], axis=1), dtype="int64"
+        ),
+        tf.ones(num_nodes, dtype="float64"),
+        dense_shape=(num_nodes, num_nodes),
+    )
     # alpha_2 / R
-    A_0 = tf.sparse.SparseTensor(W.indices, tf.ones_like(W.values, dtype="float64"), dense_shape=W.shape)
+    A_0 = tf.sparse.SparseTensor(
+        W.indices, tf.ones_like(W.values, dtype="float64"), dense_shape=W.shape
+    )
     A_i_1 = tf_sparse_multiply(P, A_0)
 
-    I = tf.sparse.SparseTensor(tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"), 
-                               tf.ones(num_nodes, dtype="float64"), 
-                               dense_shape=(num_nodes, num_nodes)) # permutation matrix
+    I = tf.sparse.SparseTensor(
+        tf.cast(tf.stack([tf.range(num_nodes, dtype="int64"), s1], axis=1), "int64"),
+        tf.ones(num_nodes, dtype="float64"),
+        dense_shape=(num_nodes, num_nodes),
+    )  # permutation matrix
     A_i = tf_sparse_multiply(I, A_0)
 
     ## intersection
@@ -174,8 +206,8 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     Q = tf.sparse.retain(Q, is_nonzero)
 
     # Combine to get the final weight
-    W_sample = tf.sparse.add(P.__mul__(tf.constant([1/p], dtype="float64")), R)
-    W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1/q], dtype="float64")))
+    W_sample = tf.sparse.add(P.__mul__(tf.constant([1 / p], dtype="float64")), R)
+    W_sample = tf.sparse.add(W_sample, Q.__mul__(tf.constant([1 / q], dtype="float64")))
     is_nonzero = tf.not_equal(W_sample.values, 0)
     W_sample = tf.sparse.retain(W_sample, is_nonzero)
     W_sample = tf.sparse.reorder(W_sample)
@@ -185,22 +217,22 @@ def random_walk_sampling_step_tf(W, s0, s1, p, q, seed=None):
     W_new = tf.sparse.reorder(W_new)
 
     # Multiply the weights by creating a new sparse matrix
-    W_sample = tf.sparse.SparseTensor(W_sample.indices, 
-                                      W_sample.values * W_new.values,
-                                      dense_shape=W_sample.shape)
+    W_sample = tf.sparse.SparseTensor(
+        W_sample.indices, W_sample.values * W_new.values, dense_shape=W_sample.shape
+    )
 
     # Taking samples from the sparse matrix
     W_sample, cdf, cdf_sample, s_next = sample_from_sparse_tf(W_sample, seed=seed)
-    
+
     return W_sample, cdf, cdf_sample, s_next
 
 
 def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
     W = preproc_W(W, symmetrify)
-    
+
     checks = bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0))
     print(f"All rows have something: {checks}")
-    
+
     # make sure the indices are sorted
     W = tf.sparse.reorder(W)
 
@@ -208,8 +240,8 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
     s0 = tf.range(W.shape[0], dtype="int64")
     _, _, _, s1 = sample_from_sparse_tf(W, seed=seed)
     S = [s0, s1]
-                  
-    #print(f"check length: s0={len(s0)}, s1={len(s1)}")
+
+    # print(f"check length: s0={len(s0)}, s1={len(s1)}")
 
     for i in range(walk_length - 1):
         _, _, _, s_next = random_walk_sampling_step_tf(
@@ -227,17 +259,17 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
 def sample_from_sparse_numpy(W_sample, seed=None):
     num_nodes = W_sample.shape[0]
     # Normalize for each row
-    row_sum = np.asarray(W_sample.sum(axis=1)).ravel() # dense
+    row_sum = np.asarray(W_sample.sum(axis=1)).ravel()  # dense
     W_sample = W_sample.tocoo()
     W_sample.data /= np.take(row_sum, W_sample.row)
-    
+
     # Compute cdf cumsum with csr matrix
     cdf = W_sample.copy().tocsr()
     cdf.data = np.cumsum(cdf.data)
     cdf = cdf.tocoo()
     # Subtract each row by broadcasting
     cdf.data = cdf.data - cdf.row
-    
+
     # Take the sample
     rs = np.random.RandomState(seed)
     uniform_sample = rs.rand(num_nodes)  # [0, 1)
@@ -247,39 +279,38 @@ def sample_from_sparse_numpy(W_sample, seed=None):
     cdf.data = cdf.data[samp_ind]
     cdf.row = cdf.row[samp_ind]
     cdf.col = cdf.col[samp_ind]
-    
+
     # Slice out the column indices: starting index of each row
     cdf = cdf.tocsr()
     s_next = cdf.indices[cdf.indptr[:-1]]
-    
+
     return W_sample, cdf, s_next
-    
+
 
 def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None):
     """Take 1 step of the random walk, with numpy / scipy.sparse."""
     num_nodes = W.shape[0]
     # alpha_1 / P
-    P = coo_matrix((np.ones(num_nodes), 
-                    (np.arange(num_nodes), s0))
-                  ).tocsc()
+    P = coo_matrix((np.ones(num_nodes), (np.arange(num_nodes), s0))).tocsc()
     # alpha_2 / R
     A_0 = W.copy().tocsc()
     A_0.data[:] = 1
-    R = A_0[s1, :].multiply(A_0[s0, :]) # elementwise multiply
+    R = A_0[s1, :].multiply(A_0[s0, :])  # elementwise multiply
     # alpha_3 / Q
     Q = A_0[s1, :] - P - R
-    A_0 = None # free some memory
-    
+    A_0 = None  # free some memory
+
     # Combine to get the final weight
-    W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W.tocsc()[s1, :])
-    #print(W_sample.toarray())
-    P, Q, R = None, None, None # free some memory
-    
+    W_sample = ((1 / p) * P + R + (1 / q) * Q).multiply(W.tocsc()[s1, :])
+    # print(W_sample.toarray())
+    P, Q, R = None, None, None  # free some memory
+
     # Make sure the rows are sorted
     W_sample = W_sample.tocsr()
     W_sample, cdf, s_next = sample_from_sparse_numpy(W_sample, seed=None)
-    
+
     return W_sample, cdf, s_next
+
 
 def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None):
     if symmetrify:
@@ -307,6 +338,8 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
     #     logging.info(f"s{ii}: {ss}")
 
     return S
+
+
 # %% Numpy procedure to generate skipgrams
 def generate_skipgram_numpy(
     S, vocab_size=10, window_size=4, negative_samples=0.0, seed=None, shuffle=True
@@ -383,7 +416,7 @@ def make_preproc_func(
     @tf.function
     def _tf_make_skipgrams(s):
         """tf nump / function wrapper."""
-        y = tf.numpy_function(_make_skipgrams, [s], tf.int64)
+        y = tf.numpy_function(_make_skipgrams, [s], tf.int32)
         return y
 
     def _fn(inputs):
@@ -394,7 +427,7 @@ def make_preproc_func(
             _tf_make_skipgrams,
             S,
             fn_output_signature=tf.RaggedTensorSpec(
-                shape=[None, 3], ragged_rank=0, dtype=tf.int64
+                shape=[None, 3], ragged_rank=0, dtype=tf.int32
             ),
         )
 
@@ -414,7 +447,7 @@ def make_preproc_func(
 
 
 def generate_skipgram_beam(
-    features,
+    data_uri,
     vocabulary_size=10,
     window_size=2,
     negative_samples=0.0,
@@ -423,14 +456,15 @@ def generate_skipgram_beam(
     feature_names=None,
     temp_dir="/tmp",
     save_path="temp",
+    beam_pipeline_args=None,
 ):
     """
     Generate Skipgrams with an Apache Beam pipeline.
 
     Parameters
     ----------
-    features : tf.Tensor
-        Features tensor, where each column is a feature.
+    data_uri : list(str)
+        List of TFRecords that contains the tensors.
     vocabulary_size : int, optional
         Size of skipgram vocabulary, by default 10
     window_size : int, optional
@@ -452,6 +486,9 @@ def generate_skipgram_beam(
     save_path : str, optional
         Output path name (without the .tfrecord extention),
         by default "temp"
+    beam_pipeline_args: dict, optional.
+        Pipeline options of Beam runner.
+        The default is None.
 
     Returns
     -------
@@ -460,20 +497,18 @@ def generate_skipgram_beam(
     num_rows_saved: int
         Number of rows of the samples saved.
     """
-    if feature_names is None:
-        feature_names = [f"f{i}" for i in range(features.shape[1])]
-    assert len(feature_names) == features.shape[1]
+
+    def parse_tensor_f(x):
+        xp = tf.io.parse_tensor(x, tf.int32)
+        xp.set_shape([None])
+        return xp
+
+    dataset = tf.data.TFRecordDataset(data_uri).map(parse_tensor_f)
 
     # Convert to list of dict dataset
-    dataset = tf.data.Dataset.from_tensor_slices(
-        {f"s{i}": features[:, i] for i in range(features.shape[1])}
-    )
     dataset_schema = dataset_metadata.DatasetMetadata(
         schema_utils.schema_from_feature_spec(
-            {
-                f"s{i}": tf.io.FixedLenFeature([], tf.int64)
-                for i in range(features.shape[1])
-            }
+            {fname: tf.io.FixedLenFeature([], tf.int32) for fname in feature_names}
         )
     )
 
@@ -484,31 +519,42 @@ def generate_skipgram_beam(
 
     desired_batch_size = tft_beam.Context.get_desired_batch_size()
     logging.info(f"Desired batch size: {desired_batch_size}")
-    
-    # Run the beam pipeline
-    with tft_beam.Context(temp_dir=temp_dir, desired_batch_size=1000):
-        transformed_dataset, transform_fn = (  # pylint: disable=unused-variable
-            dataset.as_numpy_iterator(),
-            dataset_schema,
-        ) | "Make Skipgrams " >> tft_beam.AnalyzeAndTransformDataset(preprocessing_fn)
 
-    # pylint: disable=unused-variable
-    transformed_data, transformed_metadata = transformed_dataset
-    saved_results = (
-        transformed_data
-        | "Write to TFRecord"
-        >> beam.io.tfrecordio.WriteToTFRecord(
-            file_path_prefix=save_path,
-            file_name_suffix=".tfrecords",
-            coder=tft.coders.example_proto_coder.ExampleProtoCoder(
-                transformed_metadata.schema
-            ),
-        )
+    # Run the beam pipeline
+    pipeline_options = beam.options.pipeline_options.PipelineOptions.from_dictionary(
+        beam_pipeline_args
     )
-    # print('\nRaw data:\n{}\n'.format(pprint.pformat(dataset)))
-    # print('Transformed data:\n{}'.format(pprint.pformat(transformed_data)))
-    # Return the list of paths of tfrecords
-    num_rows_saved = len(transformed_data)
+    with beam.Pipeline(options=pipeline_options) as Pipeline:
+        with tft_beam.Context(temp_dir=temp_dir, desired_batch_size=1024):
+            # pylint: disable=unused-variable
+            transformed_dataset, transform_fn = (
+                Pipeline
+                | "Data Iterator"
+                >> (  
+                    dataset.as_numpy_iterator(),
+                    dataset_schema,
+                )
+                | "Make Skipgrams "
+                >> tft_beam.AnalyzeAndTransformDataset(preprocessing_fn)
+            )
+
+            # pylint: disable=unused-variable
+            transformed_data, transformed_metadata = transformed_dataset
+            saved_results = (
+                transformed_data
+                | "Write to TFRecord"
+                >> beam.io.tfrecordio.WriteToTFRecord(
+                    file_path_prefix=save_path,
+                    file_name_suffix=".tfrecords",
+                    coder=tft.coders.example_proto_coder.ExampleProtoCoder(
+                        transformed_metadata.schema
+                    ),
+                )
+            )
+            # print('\nRaw data:\n{}\n'.format(pprint.pformat(dataset)))
+            # print('Transformed data:\n{}'.format(pprint.pformat(transformed_data)))
+            # Return the list of paths of tfrecords
+            num_rows_saved = len(transformed_data)
 
     return saved_results, num_rows_saved
 

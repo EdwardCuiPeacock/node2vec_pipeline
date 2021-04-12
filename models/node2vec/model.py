@@ -80,6 +80,7 @@ def _create_sampled_training_data(
     eval_repetitions,
     temp_dir="/tmp",
     seed=None,
+    beam_pipeline_args=None,
 ):
     """
     Sample from the graph and save the samples.
@@ -89,7 +90,7 @@ def _create_sampled_training_data(
     file_pattern: list(str)
         list of files (patterns) coming out of the Transform step,
         with pattern "{{ PIPELINE ROOT }}/Transform/transformed_examples/{{ run_id }}/[train:eval]/*.gz"
-     storage_path: str
+    storage_path: str
         Output directory of the graph samples
     data_accessor : tfx.components.trainer.fn_args_utils.DataAccessor
         DataAccessor for converting input to RecordBatch.
@@ -114,6 +115,8 @@ def _create_sampled_training_data(
         Temporary directory to store the intermediate results for beam
     seed: int, optional
         Starting seed of graph sample generation. The default is None.
+    beam_pipeline_args: dict, optional.
+        Beam pipeline arguments.
 
     Returns
     -------
@@ -121,9 +124,10 @@ def _create_sampled_training_data(
         [description]
     """
     import psutil
-    total_memory = psutil.virtual_memory().total / 1E9
+
+    total_memory = psutil.virtual_memory().total / 1e9
     logging.info(f"Total memory: {total_memory} GB")
-    
+
     dataset_iterable = _read_transformed_dataset(
         file_pattern, data_accessor, tf_transform_output
     )
@@ -143,20 +147,20 @@ def _create_sampled_training_data(
     #     pandas_data["weight"].append(batch_data["weight"].numpy().ravel())
 
     # pandas_data = {k: list(map(float,list(np.concatenate(v, axis=0)))) for k, v in pandas_data.items()}
-    
+
     # from google.cloud import storage
     # import json
     # client = storage.client.Client(project="res-nbcupea-dev-ds-sandbox-001")
     # bucket = client.get_bucket("edc-dev")
     # blob = bucket.blob("output_pandas_20210410.json")
-    # blob.upload_from_string(data=json.dumps(pandas_data), 
+    # blob.upload_from_string(data=json.dumps(pandas_data),
     #                        content_type="application/json")
     # logging.info(f"Saved pandas dataframe at bucket base")
 
     # Merge into a single tensor
     dataset = {k: tf.concat(v, axis=0) for k, v in dataset.items()}
     dataset["weight"] = tf.reshape(dataset["weight"], shape=(-1,))  # flatten
-    
+
     # Remove any unmatched vocabularies
     mask = tf.reduce_all(dataset["indices"] >= 0, axis=1)
     dataset["indices"] = tf.boolean_mask(dataset["indices"], mask, axis=0)
@@ -166,71 +170,94 @@ def _create_sampled_training_data(
     count_unique_nodes = int(
         tf.shape(tf.unique(tf.reshape(dataset["indices"], shape=(-1,)))[0])[0]
     )
-    
+
     num_nodes = int(tf.reduce_max(dataset["indices"])) + 1
-    #assert int(tf.reduce_max(dataset["indices"]))+1 == count_unique_nodes, "max index is not the same as num_nodes"
+    # assert int(tf.reduce_max(dataset["indices"]))+1 == count_unique_nodes, "max index is not the same as num_nodes"
 
     logging.info(f"Max index / Num unique nodes: {num_nodes} / {count_unique_nodes}")
     num_edges = len(dataset["weight"])
     logging.info(f"num edges: {num_edges}")
-    
+
     # Build the graph from the entire dataset
-    #W = tf.sparse.SparseTensor(
+    # W = tf.sparse.SparseTensor(
     #    dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes)
-    #)
-    W = coo_matrix((dataset["weight"].numpy(),
-            (dataset["indices"][:, 0].numpy().astype(np.int32), 
-            dataset["indices"][:, 1].numpy().astype(np.int32))), 
-            shape=(num_nodes, num_nodes))
-    
+    # )
+    W = coo_matrix(
+        (
+            dataset["weight"].numpy(),
+            (
+                dataset["indices"][:, 0].numpy().astype(np.int32),
+                dataset["indices"][:, 1].numpy().astype(np.int32),
+            ),
+        ),
+        shape=(num_nodes, num_nodes),
+    )
+
     # Check to see if all rows have at least 1 neighbor
-    #assert bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)), "not all rows have at least 1 neighbor"
-    train_data_uri_list = []
-    train_data_size = 0
-    # Create the TFRecords for training data
-    for r in range(train_repetitions):
-        # Take the sample
-        cur_seed = (seed + r * walk_length) if seed is not None else None
-        S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
+    # assert bool(tf.reduce_all(tf.sparse.reduce_max(W, axis=1) > 0)), "not all rows have at least 1 neighbor"
 
-        # Write the tensor to a TFRecord file
-        S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int64")
-        data_uri, num_rows_saved = generate_skipgram_beam(
-            S,
+    sample_metadata = {
+        "train": {
+            "random_walk_uri_list": [],
+            "skipgram_uri_list": [],
+            "data_size": 0,
+            "repetitions": train_repetitions,
+        },
+        "eval": {
+            "random_walk_uri_list": [],
+            "skipgram_uri_list": [],
+            "data_size": 0,
+            "repetitions": eval_repetitions,
+        },
+    }
+    # Perform the node2vec random walk
+    logging.info("Perform the node2vec random walk")
+    for phase in ["train", "eval"]:
+        for r in range(sample_metadata[phase]["repetitions"]):
+            # Take the sample
+            cur_seed = (
+                (
+                    seed
+                    + (r + (train_repetitions if phase == "train" else 0)) * walk_length
+                )
+                if seed is not None
+                else None
+            )
+            S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
+            S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int32")
+
+            # Write the tensor to a TFRecord file
+            data_uri = os.path.join(
+                storage_path, f"random_walk_{phase}", f"graph_sample_{r:05}"
+            )
+            logging.inf(f"Phase {phase} r={r} random walk data_uri: {data_uri}")
+            sample_metadata[phase]["random_walk_uri_list"].append(data_uri)
+
+            ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
+            writer = tf.data.experimental.TFRecordWriter(data_uri)
+            writer.write(ds)
+
+    # Generate Skipgrams
+    logging.info("Generate Skipgrams")
+    for phase in ["train", "eval"]:
+        cur_seed += 1
+        sample_metadata[phase]["skipgram_uri_list"],
+        sample_metadata[phase]["data_size"] = generate_skipgram_beam(
+            sample_metadata[phase]["random_walk_uri_list"],
             num_nodes,
             window_size,
             negative_samples,
             seed=cur_seed,
-            save_path=os.path.join(storage_path, "train", f"graph_sample_{r:05}"),
+            feature_names=[f"s{i}" for i in range(walk_length)],
+            save_path=os.path.join(storage_path, phase, f"skipgrams_{r:05}"),
             temp_dir=temp_dir,
+            beam_pipeline_args=beam_pipeline_args,
         )
 
-        train_data_uri_list += data_uri
-        train_data_size += num_rows_saved
-
-    eval_data_uri_list = []
-    eval_data_size = 0
-    for r in range(eval_repetitions):
-        # Take the sample
-        cur_seed = (
-            (seed + (train_repetitions + r) * walk_length) if seed is not None else None
-        )
-        S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
-
-        # Write the tensor to a TFRecord file
-        S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int64")
-        data_uri, num_rows_saved = generate_skipgram_beam(
-            S,
-            num_nodes,
-            window_size,
-            negative_samples,
-            seed=cur_seed,
-            save_path=os.path.join(storage_path, "eval", f"graph_sample_{r:05}"),
-            temp_dir=temp_dir,
-        )
-
-        eval_data_uri_list += data_uri
-        eval_data_size += num_rows_saved
+    train_data_uri_list = sample_metadata["train"]["skipgram_uri_list"]
+    train_data_size = sample_metadata["train"]["data_size"]
+    eval_data_uri_list = sample_metadata["eval"]["skipgram_uri_list"]
+    eval_data_size = sample_metadata["eval"]["data_size"]
 
     logging.info(f"Successfully created graph sampled dataset {storage_path}")
     logging.info("train data")

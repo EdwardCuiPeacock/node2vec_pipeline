@@ -553,7 +553,7 @@ def generate_skipgram_beam(
     # Convert to list of dict dataset
     dataset_schema = dataset_metadata.DatasetMetadata(
         schema_utils.schema_from_feature_spec(
-            {fname: tf.io.FixedLenFeature([], tf.int32) for fname in feature_names}
+            {fname: tf.io.FixedLenFeature([], tf.int64) for fname in feature_names}
         )
     )
 

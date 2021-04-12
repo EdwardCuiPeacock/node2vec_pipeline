@@ -302,7 +302,7 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
         SkipGram training dataset of ((target, context), label)
     """
     feature_spec = {
-        kk: tf.io.FixedLenFeature([], dtype=tf.int32)
+        kk: tf.io.FixedLenFeature([], dtype=tf.int64)
         for kk in ["target", "context", "label"]
     }
 
@@ -316,7 +316,7 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     )
 
     def map_fn(x, y):
-        return (x["target"], x["context"]), y
+        return (tf.cast(x["target"], "int32"), tf.cast(x["context"], "int32")), tf.cast(y, "int32")
 
     # Return as (target, context), label
     dataset = dataset.map(map_fn)

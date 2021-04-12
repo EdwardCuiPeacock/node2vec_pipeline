@@ -562,20 +562,16 @@ def generate_skipgram_beam(
         vocabulary_size, window_size, negative_samples, shuffle, seed
     )
 
-    desired_batch_size = tft_beam.Context.get_desired_batch_size()
-    logging.info(f"Desired batch size: {desired_batch_size}")
-
     # Run the beam pipeline
     pipeline_options = beam.options.pipeline_options.PipelineOptions.from_dictionary(
         beam_pipeline_args
     )
     with beam.Pipeline(options=pipeline_options) as Pipeline:
-        with tft_beam.Context(temp_dir=temp_dir, desired_batch_size=1024):
+        with tft_beam.Context(desired_batch_size=1024):
             # pylint: disable=unused-variable
             transformed_dataset, transform_fn = (
                 Pipeline
-                | "Data Iterator"
-                >> (
+                | (
                     dataset.as_numpy_iterator(),
                     dataset_schema,
                 )

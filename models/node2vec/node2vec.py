@@ -439,7 +439,7 @@ def generate_skipgram_numpy(
 
 # %% Generate skipgram with beam pipeline
 def make_preproc_func(
-    vocabulary_size, window_size, negative_samples, shuffle=True, seed=None
+    vocabulary_size, window_size, negative_samples, feature_names, shuffle=True, seed=None
 ):
     """Returns a preprocessing_fn to make skipgrams given the parameters."""
 
@@ -466,7 +466,8 @@ def make_preproc_func(
 
     def _fn(inputs):
         """Preprocess input columns into transformed columns."""
-        S = tf.stack(list(inputs.values()), axis=1)  # tf tensor
+        S = tf.stack([inputs[fname] for fname in feature_names], axis=1) # tf tensor
+        # S = tf.stack(list(inputs.values()), axis=1)  # tf tensor
 
         out = tf.map_fn(
             _tf_make_skipgrams,
@@ -493,12 +494,12 @@ def make_preproc_func(
 
 def generate_skipgram_beam(
     data_uri,
+    feature_names,
     vocabulary_size=10,
     window_size=2,
     negative_samples=0.0,
     shuffle=True,
     seed=None,
-    feature_names=None,
     temp_dir="/tmp",
     save_path="temp",
     beam_pipeline_args=None,
@@ -510,6 +511,9 @@ def generate_skipgram_beam(
     ----------
     data_uri : list(str)
         List of TFRecords that contains the tensors.
+    feature_names : list(str), optional
+        List of feature names, whose length must match the
+        number of columns of features in the TFRecord.
     vocabulary_size : int, optional
         Size of skipgram vocabulary, by default 10
     window_size : int, optional
@@ -520,11 +524,6 @@ def generate_skipgram_beam(
         Whether or not to shuffle, by default True
     seed : int, optional
         Random seed, by default None
-    feature_names : list(str), optional
-        List of feature names, whose length must match the
-        number of columns of features. The default is None,
-        in which case the function makes up the feature names
-        as ["f0", "f1", ...]
     temp_dir : str, optional
         Directory to save temporary results used by the Beam
         pipeline, by default "/tmp"
@@ -544,22 +543,21 @@ def generate_skipgram_beam(
     """
 
     def parse_tensor_f(x):
-        xp = tf.io.parse_tensor(x, tf.int32)
+        xp = tf.io.parse_tensor(x, tf.int64)
         xp.set_shape([None])
-        return xp
-
-    dataset = tf.data.TFRecordDataset(data_uri).map(parse_tensor_f)
-
-    # Convert to list of dict dataset
-    dataset_schema = dataset_metadata.DatasetMetadata(
+        return {fname: xp[i] for i, fname in enumerate(feature_names)}
+    
+    raw_data = tf.data.TFRecordDataset(data_uri).map(parse_tensor_f).as_numpy_iterator()
+    raw_data_schema = dataset_metadata.DatasetMetadata(
         schema_utils.schema_from_feature_spec(
             {fname: tf.io.FixedLenFeature([], tf.int64) for fname in feature_names}
         )
     )
-
+    dataset = (raw_data, raw_data_schema)
+    
     # Make the preprocessing_fn
     preprocessing_fn = make_preproc_func(
-        vocabulary_size, window_size, negative_samples, shuffle, seed
+        vocabulary_size, window_size, negative_samples, feature_names, shuffle, seed
     )
 
     # Run the beam pipeline
@@ -570,10 +568,7 @@ def generate_skipgram_beam(
         with tft_beam.Context(temp_dir=temp_dir, desired_batch_size=1024):
             # pylint: disable=unused-variable
             transformed_dataset, transform_fn = (
-                (
-                    dataset.as_numpy_iterator(),
-                    dataset_schema,
-                )
+                dataset
                 | "Make Skipgrams "
                 >> tft_beam.AnalyzeAndTransformDataset(preprocessing_fn)
             )

@@ -16,15 +16,16 @@ import tensorflow_transform as tft
 from models.node2vec.node2vec import (
     generate_skipgram_beam,
     build_keras_model,
-    sample_1_iteration_numpy
+    sample_1_iteration_numpy,
 )
 
-#from models.node2vec.node2vec_test import (
+# from models.node2vec.node2vec_test import (
 #    sample_1_iteration_tf,
 #    sample_1_iteration_numpy,
-#)
+# )
 
 from tfx_bsl.tfxio import dataset_options
+
 
 def _read_transformed_dataset(
     file_pattern,
@@ -237,7 +238,7 @@ def _create_sampled_training_data(
             ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
             writer = tf.data.experimental.TFRecordWriter(data_uri)
             writer.write(ds)
-    
+
     logging.info(f"Successfully created random walk datasets")
 
     # Generate Skipgrams
@@ -316,7 +317,9 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     )
 
     def map_fn(x, y):
-        return (tf.cast(x["target"], "int32"), tf.cast(x["context"], "int32")), tf.cast(y, "int32")
+        return (tf.cast(x["target"], "int32"), tf.cast(x["context"], "int32")), tf.cast(
+            y, "int32"
+        )
 
     # Return as (target, context), label
     dataset = dataset.map(map_fn)

@@ -11,6 +11,7 @@ import gc
 #import tracemalloc
 #from collections import OrderedDict
 #snapshots = OrderedDict()
+#import time
 
 import numpy as np
 import pandas as pd
@@ -269,6 +270,39 @@ def test_sample_1_iteration_tf():
     assert np.all(np.array(list(map(len, S))) == num_nodes)
 
 # %%
+def numpy_slice_sparse_matrix(A, s, default_value=True, default_dtype=bool):
+    """
+    A: csr sparse matrix
+    s: row indices
+    default_value: default the new sparse matrix with this single value
+    """
+    #snapshot.append(tracemalloc.take_snapshot()) # at start
+    A = A.tocsr()
+    start_index = np.take(A.indptr, s)
+    end_index = np.take(A.indptr, s+1)
+    new_indptr = np.concatenate([[0], np.cumsum(end_index - start_index)])
+    #snapshot.append(tracemalloc.take_snapshot()) # after finding out start end indices
+    # This could still be efficient if the slice length is not very long
+    # Hence efficient for sparse matrices
+    new_indices = np.concatenate([A.indices[i:j] for (i, j) in zip(start_index, end_index)])
+    #snapshot.append(tracemalloc.take_snapshot()) # after finding new indices
+    if default_value is None:
+        # Use original value
+        new_values = np.concatenate([A.data[i:j] for (i, j) in zip(start_index, end_index)])
+    else:
+        new_values = default_value * np.ones_like(new_indices, dtype=default_dtype)
+    #snapshot.append(tracemalloc.take_snapshot()) # after finding new values
+
+    # free some memory
+    del start_index
+    del end_index 
+    new_A = csr_matrix((new_values, new_indices, new_indptr))
+    #snapshot.append(tracemalloc.take_snapshot()) # after making the new sparse matrix
+    return new_A
+
+
+
+
 def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=False):
     epsilon = np.finfo(np.float32).eps
     W_sample.data = np.clip(W_sample.data, epsilon, np.finfo(np.float32).max)
@@ -320,6 +354,7 @@ def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=False):
 #@mem_profile
 def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     """Take 1 step of the random walk, with numpy / scipy.sparse."""
+    W.data = W.data.astype(np.float32)
     if DEBUG:
         logging.info("Start random walk")
         logging.info(f"s0={s0.shape}")
@@ -328,7 +363,7 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     # alpha_1 / P
     #tracemalloc.start()
     #snapshots["Begin"] = tracemalloc.take_snapshot()
-    P = coo_matrix((np.ones(num_nodes), 
+    P = coo_matrix((np.ones(num_nodes, dtype=bool), 
                     (np.arange(num_nodes), s0)), 
                    shape=(num_nodes, num_nodes),
                   ).tocsr()
@@ -336,13 +371,15 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
 
     # alpha_2 / R
     A_0 = W.copy().tocsr()
-    A_0.data = np.ones_like(A_0.data, dtype=int)
+    A_0.data = np.ones_like(A_0.data, dtype=bool)
     #snapshots["After creating A_0"] = tracemalloc.take_snapshot()
-
+    
     A_i = A_0[s1, :]
     #snapshots["After creating A_i"] = tracemalloc.take_snapshot()
 
-    R = A_i.multiply(A_0[s0, :]) # elementwise multiply
+    A_i_1 = A_0[s0, :]
+    #snapshots["After creating A_i_1"] = tracemalloc.take_snapshot()
+    R = A_i.multiply(A_i_1) # elementwise multiply
     #snapshots["After creating R"] = tracemalloc.take_snapshot()
     
     if DEBUG:
@@ -353,13 +390,16 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     # alpha_3 / Q
     Q = A_i - P - R
     #snapshots["After creating Q"] = tracemalloc.take_snapshot()
+    del A_i_1 # free some memory
     del A_i # free some memory
     del A_0 # free some memory
     if DEBUG:
         logging.info(f"Shape: Q={Q.shape}")
     #snapshots["After deleting A_i, A_0"] = tracemalloc.take_snapshot()
     # Combine to get the final weight
-    W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W.tocsr()[s1, :])
+    W_i = W.tocsr()[s1, :]
+    #snapshots["After creating W_i"] = tracemalloc.take_snapshot()
+    W_sample = ((1/p) * P + R + (1/q) * Q).multiply(W_i)
     #snapshots["After create W_sample"] = tracemalloc.take_snapshot()
     #print(W_sample.toarray())
     del P
@@ -488,9 +528,9 @@ if __name__ == '__main__':
     # lp.print_stats()
     
     
-    #S = sample_1_iteration_numpy(W, p=0.2, q=0.8, walk_length=walk_length, seed=42)
+    S = sample_1_iteration_numpy(W, p=0.2, q=0.8, walk_length=walk_length, seed=42)
     #%%
-    # j, i = 3, 2
+    # j, i = 9, 8
     # top_stats = list(snapshots.values())[j].compare_to(list(snapshots.values())[i], 'lineno')
     # key_j, key_i = list(snapshots.keys())[j], list(snapshots.keys())[i]
     # print(f"Between {key_j} vs. {key_i}")

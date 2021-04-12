@@ -461,7 +461,7 @@ def make_preproc_func(
     @tf.function
     def _tf_make_skipgrams(s):
         """tf nump / function wrapper."""
-        y = tf.numpy_function(_make_skipgrams, [s], tf.int32)
+        y = tf.numpy_function(_make_skipgrams, [s], tf.int64)
         return y
 
     def _fn(inputs):
@@ -474,7 +474,7 @@ def make_preproc_func(
             _tf_make_skipgrams,
             S,
             fn_output_signature=tf.RaggedTensorSpec(
-                shape=[None, 3], ragged_rank=0, dtype=tf.int32
+                shape=[None, 3], ragged_rank=0, dtype=tf.int64
             ),
         ) # Ragged tensor
 

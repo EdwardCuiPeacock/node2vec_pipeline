@@ -224,7 +224,6 @@ def _create_sampled_training_data(
                 if seed is not None
                 else None
             )
-            logging.info(f"Current seed: {cur_seed} / {seed}")
             S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
             S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int32")
 

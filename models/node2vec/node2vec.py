@@ -467,20 +467,21 @@ def make_preproc_func(
     def _fn(inputs):
         """Preprocess input columns into transformed columns."""
         S = tf.stack([inputs[fname] for fname in feature_names], axis=1) # tf tensor
-        # S = tf.stack(list(inputs.values()), axis=1)  # tf tensor
 
+        # Using ragged tensor is useful when generating negative samples
+        # which may not necessarily return the same number of samples for each row
         out = tf.map_fn(
             _tf_make_skipgrams,
             S,
             fn_output_signature=tf.RaggedTensorSpec(
                 shape=[None, 3], ragged_rank=0, dtype=tf.int32
             ),
-        )
+        ) # Ragged tensor
 
-        out = out.to_tensor(default_value=-1)
-        out = tf.reshape(out, (-1, 3))
-        index = tf.reduce_all(tf.greater(out, -1), axis=1)
-        out = tf.boolean_mask(out, index, axis=0)
+        out = out.to_tensor(default_value=-1) # regular tensor with -1 filled
+        out = tf.reshape(out, (-1, 3)) # fixed dimension of 3, [target, context, label]
+        index = tf.reduce_all(tf.greater(out, -1), axis=1) # rows with -1 mask
+        out = tf.boolean_mask(out, index, axis=0) # remove the -1 entries
 
         output = {}
         output["target"] = out[:, 0]
@@ -543,7 +544,7 @@ def generate_skipgram_beam(
     """
 
     def parse_tensor_f(x):
-        xp = tf.io.parse_tensor(x, tf.int64)
+        xp = tf.io.parse_tensor(x, tf.int32)
         xp.set_shape([None])
         return {fname: xp[i] for i, fname in enumerate(feature_names)}
     

@@ -304,7 +304,9 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     tf.data.Dataset
         SkipGram training dataset of ((target, context), label)
     """
-    logging.info(f"inputs: batch={batch_size}, epochs={num_epochs}, shuffle={shuffle}, seed={seed}")
+    logging.info(
+        f"inputs: batch={batch_size}, epochs={num_epochs}, shuffle={shuffle}, seed={seed}"
+    )
 
     feature_spec = {
         kk: tf.io.FixedLenFeature([], dtype=tf.int64)
@@ -321,22 +323,19 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     )
 
     def map_fn(x, y):
-        return (    tf.cast(x["target"], "int32"), tf.cast(x["context"], "int32")  ), 
-        tf.cast(y, "int32")
+        return (
+            (tf.cast(x["target"], "int32"), tf.cast(x["context"], "int32"))
+        ), tf.cast(y, "int32")
 
     # Return as (target, context), label
     dataset = dataset.map(map_fn)
-
-    logging.info("input mapping okay")
 
     if shuffle:
         dataset = dataset.shuffle(
             buffer_size=10000, seed=seed, reshuffle_each_iteration=True
         )
-        logging.info("input shuffle okay")
 
     dataset = dataset.batch(batch_size).repeat(num_epochs)
-    logging.info("input batch and repeat okay")
 
     return dataset
 
@@ -436,7 +435,7 @@ def run_fn(fn_args):
         shuffle=True,
         seed=model_config["seed"],
     )
-    eval_batch_size = model_config.get("eval_batch_size", train_batch_size)
+    eval_batch_size = model_config.get("eval_batch_size") or train_batch_size
     eval_dataset = _input_fn(
         eval_data_uri_list,
         batch_size=eval_batch_size,  # default to train batch_size

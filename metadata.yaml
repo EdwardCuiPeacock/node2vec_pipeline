@@ -71,11 +71,11 @@ system_configurations:
   enable_cache:
     description: Whether or not to enable caching of execution results
     type: boolean
-    value: True
+    value: False
   enable_gpc_ai_platform_training:
     description: Whether or not to enable GPU training with GCP AI Platform
     type: boolean
-    value: False
+    value: True
   preprocessing_fn:
     description: Import path to the preprocessing function relative to the project directory
     type: string
@@ -92,7 +92,7 @@ model_configurations:
   query_debug_settings:
     description: BigQuery script debug settings, such as limit number of rows of data to return, etc.
     type: string
-    value: "LIMIT 10"
+    value: ""
   seed:
     description: Starting seed of graph sample genration. Use null to avoid seeding.
     type: integer
@@ -100,7 +100,7 @@ model_configurations:
   num_epochs: 
     description: Number of training epochs
     type: integer
-    value: 5
+    value: 30
   train_batch_size: 
     description: Batch size of training
     type: integer
@@ -120,7 +120,7 @@ model_configurations:
   walk_length:
     description: node2vec graph traversal walk length
     type: integer
-    value: 3
+    value: 30
   train_repetitions:
     description: node2vec graph traversal repetitions for training dataset
     type: integer

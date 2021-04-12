@@ -236,6 +236,8 @@ def _create_sampled_training_data(
             ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
             writer = tf.data.experimental.TFRecordWriter(data_uri)
             writer.write(ds)
+    
+    logging.info(f"Successfully created random walk datasets")
 
     # Generate Skipgrams
     logging.info("Generate Skipgrams")
@@ -259,7 +261,7 @@ def _create_sampled_training_data(
     eval_data_uri_list = sample_metadata["eval"]["skipgram_uri_list"]
     eval_data_size = sample_metadata["eval"]["data_size"]
 
-    logging.info(f"Successfully created graph sampled dataset {storage_path}")
+    logging.info(f"Successfully created graph sampled skipgrams {storage_path}")
     logging.info("train data")
     logging.info(train_data_uri_list)
     logging.info(f"train data size: {train_data_size}")

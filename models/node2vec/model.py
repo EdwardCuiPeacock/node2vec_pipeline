@@ -304,10 +304,6 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     tf.data.Dataset
         SkipGram training dataset of ((target, context), label)
     """
-    logging.info(
-        f"inputs: batch={batch_size}, epochs={num_epochs}, shuffle={shuffle}, seed={seed}"
-    )
-
     feature_spec = {
         kk: tf.io.FixedLenFeature([], dtype=tf.int64)
         for kk in ["target", "context", "label"]
@@ -460,6 +456,13 @@ def run_fn(fn_args):
         log_dir=fn_args.model_run_dir, update_freq="batch"
     )
 
+    # Model checkpoint
+    check_points = tf.keras.callbacks.ModelCheckpoint(
+        filepath=os.path.join(system_config["GCS_BUCKET_NAME"], "tmp", "checkpoint"),
+        monitor="val_loss",
+        save_freq="epoch",
+    )
+
     # Do the fitting
     train_steps = train_data_size // train_batch_size + 1 * (
         train_data_size % train_batch_size > 0
@@ -475,7 +478,7 @@ def run_fn(fn_args):
         steps_per_epoch=train_steps,
         validation_data=eval_dataset,
         validation_steps=eval_steps,
-        callbacks=[tensorboard_callback],
+        callbacks=[tensorboard_callback, check_points],
         verbose=2,
     )
 
@@ -490,4 +493,4 @@ def run_fn(fn_args):
 
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})
 
-    raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))
+    # raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))

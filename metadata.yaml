@@ -100,7 +100,7 @@ model_configurations:
   num_epochs: 
     description: Number of training epochs
     type: integer
-    value: 30
+    value: 5
   train_batch_size: 
     description: Batch size of training
     type: integer
@@ -120,7 +120,7 @@ model_configurations:
   walk_length:
     description: node2vec graph traversal walk length
     type: integer
-    value: 30
+    value: 3
   train_repetitions:
     description: node2vec graph traversal repetitions for training dataset
     type: integer

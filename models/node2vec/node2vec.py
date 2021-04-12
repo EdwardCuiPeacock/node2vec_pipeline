@@ -454,7 +454,7 @@ def make_preproc_func(
             seed=seed,
         )
         samples = np.concatenate(
-            [np.asarray(pairs), np.asarray(labels)[:, None]], axis=1
+            [np.atleast_2d(np.asarray(pairs)), np.asarray(labels)[:, None]], axis=1
         )
         return samples
 

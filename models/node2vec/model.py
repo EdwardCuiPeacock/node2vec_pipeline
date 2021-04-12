@@ -247,9 +247,9 @@ def _create_sampled_training_data(
         sample_metadata[phase]["skipgram_uri_list"],
         sample_metadata[phase]["data_size"] = generate_skipgram_beam(
             sample_metadata[phase]["random_walk_uri_list"],
-            num_nodes,
-            window_size,
-            negative_samples,
+            vocabulary_size=num_nodes,
+            window_size=window_size,
+            negative_samples=negative_samples,
             seed=cur_seed,
             feature_names=[f"s{i}" for i in range(walk_length)],
             save_path=os.path.join(storage_path, phase, f"skipgrams_{r:05}"),

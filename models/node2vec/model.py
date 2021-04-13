@@ -241,6 +241,7 @@ def _create_sampled_training_data(
 
     # Generate Skipgrams
     logging.info("Generate Skipgrams")
+    logging.info(f"Storing graph sampled skipgrams at {storage_path}")
     for phase in ["train", "eval"]:
         cur_seed = (cur_seed + 1) if seed is not None else None
 
@@ -262,7 +263,7 @@ def _create_sampled_training_data(
             window_size=window_size,
             negative_samples=negative_samples,
             seed=cur_seed,
-            buffer_size=100,
+            buffer_size=10000,
             save_path=os.path.join(storage_path, phase),
         )
 

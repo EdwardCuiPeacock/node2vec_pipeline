@@ -602,7 +602,7 @@ def generate_skipgram_beam(
         xp.set_shape([None])
         return {fname: xp[i] for i, fname in enumerate(feature_names)}
 
-    raw_data = tf.data.TFRecordDataset(data_uri).map(parse_tensor_f).batch(128).as_numpy_iterator()
+    raw_data = tf.data.TFRecordDataset(data_uri).map(parse_tensor_f).as_numpy_iterator()
     raw_data_schema = dataset_metadata.DatasetMetadata(
         schema_utils.schema_from_feature_spec(
             {fname: tf.io.FixedLenFeature([], tf.int64) for fname in feature_names}
@@ -627,7 +627,7 @@ def generate_skipgram_beam(
     with beam.Pipeline(
         options=pipeline_options
     ) as Pipeline:  # options=pipeline_options
-        with tft_beam.Context(temp_dir=temp_dir, desired_batch_size=1):
+        with tft_beam.Context(temp_dir=temp_dir):
             # pylint: disable=unused-variable
             (
                 transformed_dataset,

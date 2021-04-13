@@ -1,6 +1,7 @@
 """Node2Vec core algorithm."""
 
 from absl import logging
+import os
 import gc
 from typing import Text, Optional, Union, Callable, List
 import numpy as np
@@ -25,6 +26,8 @@ import tensorflow_transform as tft
 import tensorflow_transform.beam as tft_beam
 from tensorflow_transform.tf_metadata import dataset_metadata
 from tensorflow_transform.tf_metadata import schema_utils
+
+from utils.tf_read_write_schema import tensors2tfrecord
 
 # %% Core module for node2vec sampling
 def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
@@ -387,16 +390,22 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
 
 # %% Numpy procedure to generate skipgrams
 def generate_skipgram_numpy(
-    data_uri, vocab_size=10, window_size=4, negative_samples=0.0, seed=None, shuffle=True
+    data_uri,
+    vocab_size=10,
+    window_size=4,
+    negative_samples=0.0,
+    seed=None,
+    buffer_size=100,
+    save_path="/tmp",
 ):
     """
     Generate SkipGrams, with numpy implementation.
 
     Parameters
     ----------
-    S : tf.Tensor
+    data_uri : tf.Tensor
         Features tensor, where each column is a feature.
-    vocabulary_size : int, optional
+    vocab_size : int, optional
         Size of skipgram vocabulary, by default 10
     window_size : int, optional
         Window size of skipgram, by default 2
@@ -404,57 +413,101 @@ def generate_skipgram_numpy(
         Fraction of negative samples of skipgram, by default 0.0
     seed : int, optional
         Random seed, by default None
-    shuffle : bool, optional
-        Whether or not to shuffle, by default True
+    buffer_size: int, optional
+        The buffer size to use when iterating over the data.
+        The default is 100.
+    save_path: str, optional
+        Path to the output, where batch of record generated
+        will be written as "{save_path}/skipgrams_0000x.tfrecord",
+        by default "temp"
 
     Returns
     -------
-    target: np.ndarray
-        Target word
-    context: np.ndarray
-        Context word
-    label: np.ndarray
-        Label 0/1 indicating whether this (target, context) pair
-        is a positive (1) or negative (0) example
+    saved_results: list(str)
+        List of URIs / path to the TFRecord files.
+    num_rows_saved: int
+        Number of rows of the samples saved.
     """
-    pairs_mat, labels_arr = [], []
-    for s in tqdm(S):  # each row
-        pairs, labels = skipgrams(
-            s,
-            vocabulary_size=vocab_size,
-            window_size=window_size,
-            negative_samples=negative_samples,
-            shuffle=shuffle,
-            seed=seed,
+
+    def _make_skipgrams(s):
+        """Numpy function to make skipgrams."""
+        samples_out = []
+
+        for i in range(s.shape[0]):
+            pairs, labels = skipgrams(
+                s[i, :],
+                vocabulary_size=vocab_size,
+                window_size=window_size,
+                negative_samples=negative_samples,
+                seed=seed,
+            )
+            samples = np.concatenate(
+                [np.atleast_2d(np.asarray(pairs)), np.asarray(labels)[:, None]], axis=1
+            )
+            samples_out.append(samples)
+
+        samples_out = np.concatenate(samples_out, axis=0)
+        return samples_out
+
+    # Data loading parse func
+    def parse_tensor_f(x):
+        xp = tf.io.parse_tensor(x, tf.int64)
+        xp.set_shape([None])
+        return xp
+
+    feature_name = ["target", "context", "label"]
+    raw_data = (
+        tf.data.TFRecordDataset(data_uri)
+        .map(parse_tensor_f)
+        .batch(buffer_size)
+        .as_numpy_iterator()
+    )
+    data_uri_list = []
+    num_rows_saved = 0
+    for k, s in tqdm(enumerate(raw_data)):
+        # generate skipgram
+        features = _make_skipgrams(s)
+        num_rows_saved += features.shape[0]
+
+        data_uri = os.path.join(save_path, f"skipgrams_{k:05}.tfrecord")
+        data_uri_list.append(data_uri)
+
+        # Write to tfrecord with proper format
+        tensors2tfrecord(
+            data_uri,
+            **{feature_name[i]: features[:, i] for i in range(features.shape[1])},
         )
-        pairs_mat.append(tf.convert_to_tensor(pairs))
-        labels_arr.append(tf.convert_to_tensor(labels))
 
-    pairs_mat = tf.concat(pairs_mat, axis=0)
-    labels_arr = tf.concat(labels_arr, axis=0)
-
-    # Target, context, label
-    return pairs_mat[:, 0], pairs_mat[:, 1], labels_arr
+    return data_uri_list, num_rows_saved
 
 
 # %% Generate skipgram with beam pipeline
 def make_preproc_func(
-    vocabulary_size, window_size, negative_samples, feature_names, shuffle=True, seed=None
+    vocabulary_size,
+    window_size,
+    negative_samples,
+    feature_names,
+    seed=None,
 ):
     """Returns a preprocessing_fn to make skipgrams given the parameters."""
 
     def _make_skipgrams(s):
         """Numpy function to make skipgrams."""
         samples_out = []
-        
+
         for i in range(s.shape[0]):
             pairs, labels = skipgrams(
-                    s[i, :], vocabulary_size=vocabulary_size, window_size=window_size, 
-                    negative_samples=negative_samples, seed=seed,
-                )
-            samples = np.concatenate([np.atleast_2d(np.asarray(pairs)), np.asarray(labels)[:, None]], axis=1)
+                s[i, :],
+                vocabulary_size=vocabulary_size,
+                window_size=window_size,
+                negative_samples=negative_samples,
+                seed=seed,
+            )
+            samples = np.concatenate(
+                [np.atleast_2d(np.asarray(pairs)), np.asarray(labels)[:, None]], axis=1
+            )
             samples_out.append(samples)
-            
+
         samples_out = np.concatenate(samples_out, axis=0)
         return samples_out
 
@@ -467,8 +520,8 @@ def make_preproc_func(
 
     def _fn(inputs):
         """Preprocess input columns into transformed columns."""
-        S = tf.stack([inputs[fname] for fname in feature_names], axis=1) # tf tensor
-            
+        S = tf.stack([inputs[fname] for fname in feature_names], axis=1)  # tf tensor
+
         out = _tf_make_skipgrams(S)
 
         output = {}
@@ -487,7 +540,6 @@ def generate_skipgram_beam(
     vocabulary_size=10,
     window_size=2,
     negative_samples=0.0,
-    shuffle=True,
     seed=None,
     temp_dir="/tmp",
     save_path="temp",
@@ -503,14 +555,14 @@ def generate_skipgram_beam(
     feature_names : list(str), optional
         List of feature names, whose length must match the
         number of columns of features in the TFRecord.
+        This helps determine the number of columns in the
+        TFRecords.
     vocabulary_size : int, optional
         Size of skipgram vocabulary, by default 10
     window_size : int, optional
         Window size of skipgram, by default 2
     negative_samples : float, optional
         Fraction of negative samples of skipgram, by default 0.0
-    shuffle : bool, optional
-        Whether or not to shuffle, by default True
     seed : int, optional
         Random seed, by default None
     temp_dir : str, optional
@@ -535,7 +587,7 @@ def generate_skipgram_beam(
         xp = tf.io.parse_tensor(x, tf.int32)
         xp.set_shape([None])
         return {fname: xp[i] for i, fname in enumerate(feature_names)}
-    
+
     raw_data = tf.data.TFRecordDataset(data_uri).map(parse_tensor_f).as_numpy_iterator()
     raw_data_schema = dataset_metadata.DatasetMetadata(
         schema_utils.schema_from_feature_spec(
@@ -543,23 +595,31 @@ def generate_skipgram_beam(
         )
     )
     dataset = (raw_data, raw_data_schema)
-    
+
     # Make the preprocessing_fn
     preprocessing_fn = make_preproc_func(
-        vocabulary_size, window_size, negative_samples, feature_names, shuffle, seed
+        vocabulary_size, window_size, negative_samples, feature_names, seed
     )
 
     # Run the beam pipeline
-    pipeline_options = beam.options.pipeline_options.PipelineOptions.from_dictionary(
-        beam_pipeline_args
-    )
-    with beam.Pipeline(options=pipeline_options) as Pipeline: # options=pipeline_options
+    pipeline_options = (
+        beam.options.pipeline_options.PipelineOptions.from_dictionary(
+            beam_pipeline_args
+        )
+        if beam_pipeline_args is not None
+        else None
+    )  # None = DirectRunner, local mode
+
+    with beam.Pipeline(
+        options=pipeline_options
+    ) as Pipeline:  # options=pipeline_options
         with tft_beam.Context(temp_dir=temp_dir):
             # pylint: disable=unused-variable
-            transformed_dataset, transform_fn = (
-                dataset
-                | "Make Skipgrams "
-                >> tft_beam.AnalyzeAndTransformDataset(preprocessing_fn)
+            (
+                transformed_dataset,
+                transform_fn,
+            ) = dataset | "Make Skipgrams " >> tft_beam.AnalyzeAndTransformDataset(
+                preprocessing_fn
             )
 
             # pylint: disable=unused-variable

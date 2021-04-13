@@ -15,6 +15,7 @@ import tensorflow_transform as tft
 
 from models.node2vec.node2vec import (
     generate_skipgram_beam,
+    generate_skipgram_numpy,
     build_keras_model,
     sample_1_iteration_numpy,
 )
@@ -253,6 +254,16 @@ def _create_sampled_training_data(
             temp_dir=temp_dir,
             beam_pipeline_args=beam_pipeline_args,
         )
+
+        # saved_results, num_rows_saved = generate_skipgram_numpy(
+        #     sample_metadata[phase]["random_walk_uri_list"],
+        #     vocab_size=num_nodes,
+        #     window_size=window_size,
+        #     negative_samples=negative_samples,
+        #     seed=cur_seed,
+        #     buffer_size=100,
+        #     save_path=os.path.join(storage_path, phase),
+        # )
 
         sample_metadata[phase]["skipgram_uri_list"] = saved_results
         sample_metadata[phase]["data_size"] = num_rows_saved

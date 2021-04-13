@@ -489,8 +489,8 @@ def generate_skipgram_numpy(
         writer = tf.data.experimental.TFRecordWriter(data_uri)
         writer.write(ds)
 
-        t2 = time.time() - t1
-        logging.info(f"Making skipgrams batch {k}: generation time: {t1} s, save time: {t2}")
+        t2 = time.time() - tnow  - t1
+        logging.info(f"Making skipgrams batch {k}: generation time: {t1} s, save time: {t2} s")
 
     return data_uri_list, num_rows_saved
 

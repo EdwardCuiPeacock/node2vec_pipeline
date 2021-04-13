@@ -3,6 +3,7 @@
 from absl import logging
 import os
 import gc
+import time
 from typing import Text, Optional, Union, Callable, List
 import numpy as np
 from tqdm import tqdm
@@ -429,6 +430,12 @@ def generate_skipgram_numpy(
         Number of rows of the samples saved.
     """
 
+    import shutil
+    total, used, free = shutil.disk_usage("/")
+    logging.info("Total: %d GiB" % (total // (2**30)))
+    logging.info("Used: %d GiB" % (used // (2**30)))
+    logging.info("Free: %d GiB" % (free // (2**30)))
+
     def _make_skipgrams(s):
         """Numpy function to make skipgrams."""
         samples_out = []
@@ -465,19 +472,25 @@ def generate_skipgram_numpy(
     data_uri_list = []
     num_rows_saved = 0
     for k, s in enumerate(tqdm(raw_data)):
-        logging.info(f"Making skipgrams batch {k}")
+        tnow = time.time()
         # generate skipgram
         features = _make_skipgrams(s)
         num_rows_saved += features.shape[0]
 
         data_uri = os.path.join(save_path, f"skipgrams_{k:05}.tfrecord")
         data_uri_list.append(data_uri)
-
+        t1 = time.time() - tnow
         # Write to tfrecord with proper format
-        tensors2tfrecord(
-            data_uri,
-            **{feature_name[i]: features[:, i] for i in range(features.shape[1])},
-        )
+        # tensors2tfrecord(
+        #     data_uri,
+        #     **{feature_name[i]: features[:, i] for i in range(features.shape[1])},
+        # )
+        ds = tf.data.Dataset.from_tensor_slices(features).map(tf.io.serialize_tensor)
+        writer = tf.data.experimental.TFRecordWriter(data_uri)
+        writer.write(ds)
+
+        t2 = time.time() - t1
+        logging.info(f"Making skipgrams batch {k}: generation time: {t1} s, save time: {t2}")
 
     return data_uri_list, num_rows_saved
 

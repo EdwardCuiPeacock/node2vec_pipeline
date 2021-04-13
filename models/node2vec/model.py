@@ -314,27 +314,32 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     tf.data.Dataset
         SkipGram training dataset of ((target, context), label)
     """
-    feature_spec = {
-        kk: tf.io.FixedLenFeature([], dtype=tf.int64)
-        for kk in ["target", "context", "label"]
-    }
+    # feature_spec = {
+    #     kk: tf.io.FixedLenFeature([], dtype=tf.int64)
+    #     for kk in ["target", "context", "label"]
+    # }
 
-    dataset = tf.data.experimental.make_batched_features_dataset(
-        file_pattern=data_uri_list,
-        batch_size=1,  # do batching later
-        num_epochs=1,  # do epoch repetitions later
-        shuffle=False,  # do shuffling later
-        features=feature_spec,
-        label_key="label",
-    )
+    # dataset = tf.data.experimental.make_batched_features_dataset(
+    #     file_pattern=data_uri_list,
+    #     batch_size=1,  # do batching later
+    #     num_epochs=1,  # do epoch repetitions later
+    #     shuffle=False,  # do shuffling later
+    #     features=feature_spec,
+    #     label_key="label",
+    # )
 
-    def map_fn(x, y):
-        return (
-            (tf.cast(x["target"], "int32"), tf.cast(x["context"], "int32"))
-        ), tf.cast(y, "int32")
+    # def map_fn(x, y):
+    #     return (
+    #         (tf.cast(x["target"], "int32"), tf.cast(x["context"], "int32"))
+    #     ), tf.cast(y, "int32")
+
+    def map_fn(x):
+        x = tf.io.parse_tensor(x, tf.int64)
+        x.set_shape([None, 3])
+        return (tf.cast(x[0], "int32"), tf.cast(x[1], "int32")), tf.cast(x[2], "int32")
 
     # Return as (target, context), label
-    dataset = dataset.map(map_fn)
+    dataset = tf.data.TFRecordDataset(data_uri_list).map(map_fn)
 
     if shuffle:
         dataset = dataset.shuffle(

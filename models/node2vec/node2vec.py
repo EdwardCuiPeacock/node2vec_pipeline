@@ -387,7 +387,7 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
 
 # %% Numpy procedure to generate skipgrams
 def generate_skipgram_numpy(
-    S, vocab_size=10, window_size=4, negative_samples=0.0, seed=None, shuffle=True
+    data_uri, vocab_size=10, window_size=4, negative_samples=0.0, seed=None, shuffle=True
 ):
     """
     Generate SkipGrams, with numpy implementation.
@@ -462,6 +462,7 @@ def make_preproc_func(
     def _tf_make_skipgrams(s):
         """tf nump / function wrapper."""
         y = tf.numpy_function(_make_skipgrams, [s], tf.int64)
+        y.set_shape([None, 3])
         return y
 
     def _fn(inputs):

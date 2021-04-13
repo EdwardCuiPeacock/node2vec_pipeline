@@ -3,7 +3,6 @@
 from absl import logging
 import os
 import gc
-import time
 from typing import Text, Optional, Union, Callable, List
 import numpy as np
 from tqdm import tqdm
@@ -486,7 +485,7 @@ def generate_skipgram_numpy(
         ds = tf.data.Dataset.from_tensor_slices(features).map(tf.io.serialize_tensor)
         writer = tf.data.experimental.TFRecordWriter(data_uri)
         writer.write(ds)
-        
+
     return data_uri_list, num_rows_saved
 
 

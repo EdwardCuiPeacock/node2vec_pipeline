@@ -1,6 +1,6 @@
 # This file sets up the environment variables of the job run
 pipeline_name: node2vec_sports_syn
-pipeline_version: "0_1_0" # must be in  this format
+pipeline_version: "0_1_1" # must be in  this format
 description: |
   This pipeline runs the node2vec model on TFX with tensorflow / Keras
   system_configuration: All fields are required for the pipeline to run properly
@@ -75,7 +75,7 @@ system_configurations:
   enable_gpc_ai_platform_training:
     description: Whether or not to enable GPU training with GCP AI Platform
     type: boolean
-    value: True
+    value: False
   preprocessing_fn:
     description: Import path to the preprocessing function relative to the project directory
     type: string

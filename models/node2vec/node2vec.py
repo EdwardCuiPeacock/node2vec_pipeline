@@ -451,7 +451,7 @@ def generate_skipgram_numpy(
 
     # Data loading parse func
     def parse_tensor_f(x):
-        xp = tf.io.parse_tensor(x, tf.int64)
+        xp = tf.io.parse_tensor(x, tf.int32)
         xp.set_shape([None])
         return xp
 

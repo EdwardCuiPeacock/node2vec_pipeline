@@ -92,7 +92,7 @@ model_configurations:
   query_debug_settings:
     description: BigQuery script debug settings, such as limit number of rows of data to return, etc.
     type: string
-    value: ""
+    value: "LIMIT 10"
   seed:
     description: Starting seed of graph sample genration. Use null to avoid seeding.
     type: integer

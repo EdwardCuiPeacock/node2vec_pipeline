@@ -553,7 +553,7 @@ def generate_skipgram_beam(
         beam_pipeline_args
     )
     with beam.Pipeline(options=pipeline_options) as Pipeline: # options=pipeline_options
-        with tft_beam.Context(temp_dir=temp_dir, desired_batch_size=1024):
+        with tft_beam.Context(temp_dir=temp_dir):
             # pylint: disable=unused-variable
             transformed_dataset, transform_fn = (
                 dataset

@@ -445,18 +445,18 @@ def make_preproc_func(
 
     def _make_skipgrams(s):
         """Numpy function to make skipgrams."""
-        pairs, labels = skipgrams(
-            s,
-            vocabulary_size=vocabulary_size,
-            window_size=window_size,
-            negative_samples=negative_samples,
-            shuffle=shuffle,
-            seed=seed,
-        )
-        samples = np.concatenate(
-            [np.atleast_2d(np.asarray(pairs)), np.asarray(labels)[:, None]], axis=1
-        )
-        return samples
+        samples_out = []
+        
+        for i in range(s.shape[0]):
+            pairs, labels = skipgrams(
+                    s[i, :], vocabulary_size=vocabulary_size, window_size=window_size, 
+                    negative_samples=negative_samples, seed=seed,
+                )
+            samples = np.concatenate([np.atleast_2d(np.asarray(pairs)), np.asarray(labels)[:, None]], axis=1)
+            samples_out.append(samples)
+            
+        samples_out = np.concatenate(samples_out, axis=0)
+        return samples_out
 
     @tf.function
     def _tf_make_skipgrams(s):
@@ -467,21 +467,8 @@ def make_preproc_func(
     def _fn(inputs):
         """Preprocess input columns into transformed columns."""
         S = tf.stack([inputs[fname] for fname in feature_names], axis=1) # tf tensor
-
-        # Using ragged tensor is useful when generating negative samples
-        # which may not necessarily return the same number of samples for each row
-        out = tf.map_fn(
-            _tf_make_skipgrams,
-            S,
-            fn_output_signature=tf.RaggedTensorSpec(
-                shape=[None, 3], ragged_rank=0, dtype=tf.int64
-            ),
-        ) # Ragged tensor
-
-        out = out.to_tensor(default_value=-1) # regular tensor with -1 filled
-        out = tf.reshape(out, (-1, 3)) # fixed dimension of 3, [target, context, label]
-        index = tf.reduce_all(tf.greater(out, -1), axis=1) # rows with -1 mask
-        out = tf.boolean_mask(out, index, axis=0) # remove the -1 entries
+            
+        out = _tf_make_skipgrams(S)
 
         output = {}
         output["target"] = out[:, 0]

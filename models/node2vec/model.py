@@ -123,97 +123,120 @@ def _create_sampled_training_data(
     [type]
         [description]
     """
-    dataset_iterable = _read_transformed_dataset(
-        file_pattern, data_accessor, tf_transform_output
-    )
-    logging.info("Loaded dataset schema ...")
-    logging.info(dataset_iterable)
-    # Iterate over the batches and build the final dict
-    dataset = {"indices": [], "weight": []}
-    for batch_data in dataset_iterable:
-        dataset["indices"].append(
-            tf.concat([batch_data["InSeasonSeries_Id"], batch_data["token"]], axis=1)
-        )
-        dataset["weight"].append(batch_data["weight"])
-
-    # Merge into a single tensor
-    dataset = {k: tf.concat(v, axis=0) for k, v in dataset.items()}
-    dataset["weight"] = tf.reshape(dataset["weight"], shape=(-1,))  # flatten
-
-    # Remove any unmatched vocabularies
-    mask = tf.reduce_all(dataset["indices"] >= 0, axis=1)
-    dataset["indices"] = tf.boolean_mask(dataset["indices"], mask, axis=0)
-    dataset["weight"] = tf.boolean_mask(dataset["weight"], mask, axis=0)
-
-    # logging.info(dataset) # verbose print
-    count_unique_nodes = int(
-        tf.shape(tf.unique(tf.reshape(dataset["indices"], shape=(-1,)))[0])[0]
-    )
-
-    num_nodes = int(tf.reduce_max(dataset["indices"])) + 1
-
-    logging.info(f"Max index / Num unique nodes: {num_nodes} / {count_unique_nodes}")
-    num_edges = len(dataset["weight"])
-    logging.info(f"num edges: {num_edges}")
-
-    # Build the graph from the entire dataset
-    # W = tf.sparse.SparseTensor(
-    #    dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes)
+    # dataset_iterable = _read_transformed_dataset(
+    #     file_pattern, data_accessor, tf_transform_output
     # )
-    W = coo_matrix(
-        (
-            dataset["weight"].numpy(),
-            (
-                dataset["indices"][:, 0].numpy().astype(np.int32),
-                dataset["indices"][:, 1].numpy().astype(np.int32),
-            ),
-        ),
-        shape=(num_nodes, num_nodes),
-    )
+    # logging.info("Loaded dataset schema ...")
+    # logging.info(dataset_iterable)
+    # # Iterate over the batches and build the final dict
+    # dataset = {"indices": [], "weight": []}
+    # for batch_data in dataset_iterable:
+    #     dataset["indices"].append(
+    #         tf.concat([batch_data["InSeasonSeries_Id"], batch_data["token"]], axis=1)
+    #     )
+    #     dataset["weight"].append(batch_data["weight"])
 
-    # Check to see if all rows have at least 1 neighbor
-    sample_metadata = {
-        "train": {
-            "random_walk_uri_list": [],
-            "skipgram_uri_list": [],
-            "data_size": 0,
-            "repetitions": train_repetitions,
-        },
-        "eval": {
-            "random_walk_uri_list": [],
-            "skipgram_uri_list": [],
-            "data_size": 0,
-            "repetitions": eval_repetitions,
-        },
-    }
-    # Perform the node2vec random walk
-    logging.info("Perform the node2vec random walk")
-    for phase in ["train", "eval"]:
-        for r in range(sample_metadata[phase]["repetitions"]):
-            # Take the sample
-            cur_seed = (
-                (
-                    seed
-                    + (r + (train_repetitions if phase == "eval" else 0)) * walk_length
-                )
-                if seed is not None
-                else None
-            )
-            S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
-            S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int32")
+    # # Merge into a single tensor
+    # dataset = {k: tf.concat(v, axis=0) for k, v in dataset.items()}
+    # dataset["weight"] = tf.reshape(dataset["weight"], shape=(-1,))  # flatten
 
-            # Write the tensor to a TFRecord file
-            data_uri = os.path.join(
-                storage_path, f"random_walk_{phase}", f"graph_sample_{r:05}"
-            )
-            logging.info(f"Phase {phase} r={r} random walk data_uri: {data_uri}")
-            sample_metadata[phase]["random_walk_uri_list"].append(data_uri)
+    # # Remove any unmatched vocabularies
+    # mask = tf.reduce_all(dataset["indices"] >= 0, axis=1)
+    # dataset["indices"] = tf.boolean_mask(dataset["indices"], mask, axis=0)
+    # dataset["weight"] = tf.boolean_mask(dataset["weight"], mask, axis=0)
 
-            ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
-            writer = tf.data.experimental.TFRecordWriter(data_uri)
-            writer.write(ds)
+    # # logging.info(dataset) # verbose print
+    # count_unique_nodes = int(
+    #     tf.shape(tf.unique(tf.reshape(dataset["indices"], shape=(-1,)))[0])[0]
+    # )
 
-    logging.info(f"Successfully created random walk datasets")
+    # num_nodes = int(tf.reduce_max(dataset["indices"])) + 1
+
+    # logging.info(f"Max index / Num unique nodes: {num_nodes} / {count_unique_nodes}")
+    # num_edges = len(dataset["weight"])
+    # logging.info(f"num edges: {num_edges}")
+
+    # # Build the graph from the entire dataset
+    # # W = tf.sparse.SparseTensor(
+    # #    dataset["indices"], dataset["weight"], dense_shape=(num_nodes, num_nodes)
+    # # )
+    # W = coo_matrix(
+    #     (
+    #         dataset["weight"].numpy(),
+    #         (
+    #             dataset["indices"][:, 0].numpy().astype(np.int32),
+    #             dataset["indices"][:, 1].numpy().astype(np.int32),
+    #         ),
+    #     ),
+    #     shape=(num_nodes, num_nodes),
+    # )
+
+    # # Check to see if all rows have at least 1 neighbor
+    # sample_metadata = {
+    #     "train": {
+    #         "random_walk_uri_list": [],
+    #         "skipgram_uri_list": [],
+    #         "data_size": 0,
+    #         "repetitions": train_repetitions,
+    #     },
+    #     "eval": {
+    #         "random_walk_uri_list": [],
+    #         "skipgram_uri_list": [],
+    #         "data_size": 0,
+    #         "repetitions": eval_repetitions,
+    #     },
+    # }
+    # # Perform the node2vec random walk
+    # logging.info("Perform the node2vec random walk")
+    # for phase in ["train", "eval"]:
+    #     for r in range(sample_metadata[phase]["repetitions"]):
+    #         # Take the sample
+    #         cur_seed = (
+    #             (
+    #                 seed
+    #                 + (r + (train_repetitions if phase == "eval" else 0)) * walk_length
+    #             )
+    #             if seed is not None
+    #             else None
+    #         )
+    #         S = sample_1_iteration_numpy(W, p, q, walk_length, seed=cur_seed)
+    #         S = tf.cast(tf.transpose(tf.stack(S, axis=0)), "int32")
+
+    #         # Write the tensor to a TFRecord file
+    #         data_uri = os.path.join(
+    #             storage_path, f"random_walk_{phase}", f"graph_sample_{r:05}"
+    #         )
+    #         logging.info(f"Phase {phase} r={r} random walk data_uri: {data_uri}")
+    #         sample_metadata[phase]["random_walk_uri_list"].append(data_uri)
+
+    #         ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
+    #         writer = tf.data.experimental.TFRecordWriter(data_uri)
+    #         writer.write(ds)
+
+    # logging.info(f"Successfully created random walk datasets")
+
+    sample_metadata = {}
+    sample_metadata["train"] = {}
+    sample_metadata["eval"] = {}
+
+    sample_metadata["train"]["random_walk_uri_list"] = [
+    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00000", 
+    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00001",
+    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00002",
+    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00003",
+    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00004",
+    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00005",
+    ]
+
+    sample_metadata["eval"]["random_walk_uri_list"] = ["gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_eval/graph_sample_00000"]
+
+
+    sample_metadata["train"]["data_size"] = 0
+    sample_metadata["eval"]["data_size"] = 0
+
+    num_nodes = 155155
+
+    cur_seed = 252
 
     # Generate Skipgrams
     logging.info("Generate Skipgrams")
@@ -226,7 +249,7 @@ def _create_sampled_training_data(
             negative_samples=negative_samples,
             seed=cur_seed,
             feature_names=[f"s{i}" for i in range(walk_length)],
-            save_path=os.path.join(storage_path, phase, f"skipgrams_{r:05}"),
+            save_path=os.path.join(storage_path, phase, "skipgrams"),
             temp_dir=temp_dir,
             beam_pipeline_args=beam_pipeline_args,
         )

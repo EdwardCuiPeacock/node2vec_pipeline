@@ -204,7 +204,7 @@ def _create_sampled_training_data(
 
     #         # Write the tensor to a TFRecord file
     #         data_uri = os.path.join(
-    #             storage_path, f"random_walk_{phase}", f"graph_sample_{r:05}"
+    #             storage_path, f"random_walk_{phase}", f"graph_sample_{r:05}.tfrecord"
     #         )
     #         logging.info(f"Phase {phase} r={r} random walk data_uri: {data_uri}")
     #         sample_metadata[phase]["random_walk_uri_list"].append(data_uri)

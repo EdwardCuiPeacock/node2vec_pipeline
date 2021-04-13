@@ -465,6 +465,7 @@ def generate_skipgram_numpy(
     data_uri_list = []
     num_rows_saved = 0
     for k, s in enumerate(tqdm(raw_data)):
+        logging.info(f"Making skipgrams batch {k}")
         # generate skipgram
         features = _make_skipgrams(s)
         num_rows_saved += features.shape[0]

@@ -263,7 +263,7 @@ def _create_sampled_training_data(
             window_size=window_size,
             negative_samples=negative_samples,
             seed=cur_seed,
-            buffer_size=10000,
+            buffer_size=1000,
             save_path=os.path.join(storage_path, phase),
         )
 

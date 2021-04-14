@@ -278,7 +278,7 @@ def _create_sampled_training_data(
     # eval_data_uri_list = sample_metadata["eval"]["skipgram_uri_list"]
     # eval_data_size = sample_metadata["eval"]["data_size"]
     
-    base_path = "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_1/Trainer/graph_samples/18860"
+    base_path = "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_1/Trainer/graph_samples/18971"
     train_data_uri_list = [os.path.join(base_path, "train", f"skipgrams_{r:05}.tfrecord") for r in range(455)]
     eval_data_uri_list = [os.path.join(base_path, "eval", f"skipgrams_{r:05}.tfrecord") for r in range(76)]
     train_data_size = 4654650

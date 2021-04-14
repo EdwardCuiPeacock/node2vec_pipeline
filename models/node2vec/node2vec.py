@@ -1,6 +1,8 @@
 """Node2Vec core algorithm."""
 
-from absl import logging
+import logging
+logging.basicConfig(level=logging.INFO)
+
 import os
 import gc
 import time

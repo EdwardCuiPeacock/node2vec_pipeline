@@ -4,8 +4,6 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import logging
-logging.basicConfig(level=logging.INFO)
 
 import pandas as pd
 import numpy as np
@@ -129,8 +127,8 @@ def _create_sampled_training_data(
     # dataset_iterable = _read_transformed_dataset(
     #     file_pattern, data_accessor, tf_transform_output
     # )
-    # logging.info("Loaded dataset schema ...")
-    # logging.info(dataset_iterable)
+    # print("Loaded dataset schema ...")
+    # print(dataset_iterable)
     # # Iterate over the batches and build the final dict
     # dataset = {"indices": [], "weight": []}
     # for batch_data in dataset_iterable:
@@ -148,16 +146,16 @@ def _create_sampled_training_data(
     # dataset["indices"] = tf.boolean_mask(dataset["indices"], mask, axis=0)
     # dataset["weight"] = tf.boolean_mask(dataset["weight"], mask, axis=0)
 
-    # # logging.info(dataset) # verbose print
+    # # print(dataset) # verbose print
     # count_unique_nodes = int(
     #     tf.shape(tf.unique(tf.reshape(dataset["indices"], shape=(-1,)))[0])[0]
     # )
 
     # num_nodes = int(tf.reduce_max(dataset["indices"])) + 1
 
-    # logging.info(f"Max index / Num unique nodes: {num_nodes} / {count_unique_nodes}")
+    # print(f"Max index / Num unique nodes: {num_nodes} / {count_unique_nodes}")
     # num_edges = len(dataset["weight"])
-    # logging.info(f"num edges: {num_edges}")
+    # print(f"num edges: {num_edges}")
 
     # # Build the graph from the entire dataset
     # # W = tf.sparse.SparseTensor(
@@ -190,7 +188,7 @@ def _create_sampled_training_data(
     #     },
     # }
     # # Perform the node2vec random walk
-    # logging.info("Perform the node2vec random walk")
+    # print("Perform the node2vec random walk")
     # for phase in ["train", "eval"]:
     #     for r in range(sample_metadata[phase]["repetitions"]):
     #         # Take the sample
@@ -223,16 +221,17 @@ def _create_sampled_training_data(
     sample_metadata["eval"] = {}
 
     sample_metadata["train"]["random_walk_uri_list"] = [
-    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00000", 
-    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00001",
-    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00002",
-    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00003",
-    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00004",
-    "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00005",
+        "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00000",
+        "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00001",
+        "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00002",
+        "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00003",
+        "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00004",
+        "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_train/graph_sample_00005",
     ]
 
-    sample_metadata["eval"]["random_walk_uri_list"] = ["gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_eval/graph_sample_00000"]
-
+    sample_metadata["eval"]["random_walk_uri_list"] = [
+        "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_0/Trainer/graph_samples/18563/random_walk_eval/graph_sample_00000"
+    ]
 
     sample_metadata["train"]["data_size"] = 0
     sample_metadata["eval"]["data_size"] = 0
@@ -242,8 +241,8 @@ def _create_sampled_training_data(
     cur_seed = 252
 
     # Generate Skipgrams
-    logging.info("Generate Skipgrams")
-    logging.info(f"Storing graph sampled skipgrams at {storage_path}")
+    print("Generate Skipgrams")
+    print(f"Storing graph sampled skipgrams at {storage_path}")
     for phase in ["train", "eval"]:
         cur_seed = (cur_seed + 1) if seed is not None else None
 
@@ -277,19 +276,24 @@ def _create_sampled_training_data(
     # train_data_size = sample_metadata["train"]["data_size"]
     # eval_data_uri_list = sample_metadata["eval"]["skipgram_uri_list"]
     # eval_data_size = sample_metadata["eval"]["data_size"]
-    
+
     base_path = "gs://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_1/Trainer/graph_samples/18971"
-    train_data_uri_list = [os.path.join(base_path, "train", f"skipgrams_{r:05}.tfrecord") for r in range(455)]
-    eval_data_uri_list = [os.path.join(base_path, "eval", f"skipgrams_{r:05}.tfrecord") for r in range(76)]
+    train_data_uri_list = [
+        os.path.join(base_path, "train", f"skipgrams_{r:05}.tfrecord")
+        for r in range(455)
+    ]
+    eval_data_uri_list = [
+        os.path.join(base_path, "eval", f"skipgrams_{r:05}.tfrecord") for r in range(76)
+    ]
     train_data_size = 4654650
     eval_data_size = 775775
-    logging.info(f"Successfully created graph sampled skipgrams {storage_path}")
-    logging.info("train data")
-    logging.info(train_data_uri_list)
-    logging.info(f"train data size: {train_data_size}")
-    logging.info("eval data")
-    logging.info(eval_data_uri_list)
-    logging.info(f"eval data size: {eval_data_size}")
+    print(f"Successfully created graph sampled skipgrams {storage_path}")
+    print("train data")
+    print(train_data_uri_list)
+    print(f"train data size: {train_data_size}")
+    print("eval data")
+    print(eval_data_uri_list)
+    print(f"eval data size: {eval_data_size}")
 
     return (
         train_data_uri_list,
@@ -345,10 +349,14 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
         x = tf.io.parse_tensor(x, tf.int64)
         x.set_shape([None])
         # (target, context), (softmax sparse label index = 0)
-        return (tf.cast(x[0], "int32"), tf.cast(x[1], "int32")), tf.cast(tf.constant([0]), "int32")
+        return (tf.cast(x[0], "int32"), tf.cast(x[1], "int32")), tf.cast(
+            tf.constant([0]), "int32"
+        )
 
     # Return as (target, context), label
-    dataset = tf.data.TFRecordDataset(data_uri_list, compression_type="GZIP").map(map_fn)
+    dataset = tf.data.TFRecordDataset(data_uri_list, compression_type="GZIP").map(
+        map_fn
+    )
 
     if shuffle:
         dataset = dataset.shuffle(
@@ -407,13 +415,13 @@ def run_fn(fn_args):
             - "system_config": system configurations
     """
     fn_lists = str(fn_args.__dict__)
-    logging.info(f"fn attributes {fn_lists}")
-    logging.info(f"tansformed_oputput {fn_args.transform_output}")
+    print(f"fn attributes {fn_lists}")
+    print(f"tansformed_oputput {fn_args.transform_output}")
 
-    logging.info("See if GPU is available")
-    logging.info(tf.config.list_physical_devices("GPU"))
+    print("See if GPU is available")
+    print(tf.config.list_physical_devices("GPU"))
 
-    logging.info(f"Tensorflow version: {tf.__version__}")
+    print(f"Tensorflow version: {tf.__version__}")
 
     # Get some parameters
     system_config = fn_args.custom_config["system_config"]
@@ -470,6 +478,7 @@ def run_fn(fn_args):
         if previous_model_path is not None and previous_model_path != "":
             model = tf.keras.models.load_model(previous_model_path)
             print("Continue training from:", previous_model_path)
+            print(model.summary())
         else:
             model = build_keras_model(
                 vocab_size=int(num_nodes),
@@ -482,7 +491,8 @@ def run_fn(fn_args):
 
     # Write logs to path
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=fn_args.model_run_dir, update_freq=1000,
+        log_dir=fn_args.model_run_dir,
+        update_freq=1000,
     )
 
     # Model checkpoint

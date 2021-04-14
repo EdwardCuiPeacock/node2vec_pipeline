@@ -1,8 +1,4 @@
 """Node2Vec core algorithm."""
-
-import logging
-logging.basicConfig(level=logging.INFO)
-
 import os
 import gc
 import time
@@ -30,7 +26,7 @@ import tensorflow_transform.beam as tft_beam
 from tensorflow_transform.tf_metadata import dataset_metadata
 from tensorflow_transform.tf_metadata import schema_utils
 
-#from utils.tf_read_write_schema import tensors2tfrecord
+# from utils.tf_read_write_schema import tensors2tfrecord
 
 # %% Core module for node2vec sampling
 def tf_sparse_multiply(a: tf.SparseTensor, b: tf.SparseTensor):
@@ -82,7 +78,7 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=False):
 
     if DEBUG:
         check = bool(tf.reduce_min(W_sample.values) > 0)
-        logging.info(f"All W_sample values are positive before normalization: {check}")
+        print(f"All W_sample values are positive before normalization: {check}")
 
     # Normalize each row
     row_sum = tf.sparse.reduce_sum(W_sample, axis=1, keepdims=False)
@@ -96,12 +92,10 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=False):
 
     if DEBUG:
         check = bool(tf.reduce_min(W_sample.values) > 0)
-        logging.info(f"All W_sample values are positive after normalization: {check}")
+        print(f"All W_sample values are positive after normalization: {check}")
 
         check = float(tf.reduce_min(tf.sparse.reduce_sum(W_sample, axis=1)))
-        logging.info(
-            f"Min value of row sum after normalization (expected to be 1) {check}"
-        )
+        print(f"Min value of row sum after normalization (expected to be 1) {check}")
 
     # Compute the CDF row-wise
     sample_values = tf.cumsum(W_sample.values) - tf.cast(
@@ -114,7 +108,7 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=False):
 
     if DEBUG:
         check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0.999))
-        logging.info(f"All cdf rows cumulative of 1: {check}")
+        print(f"All cdf rows cumulative of 1: {check}")
 
     # Use Inverse Trasnform sampling on the sparse matrix
     values_random = tf.random.uniform(
@@ -136,10 +130,10 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=False):
             .tolist()
         )
 
-        logging.info(f"random df missing rows: {missing_rows}")
+        print(f"random df missing rows: {missing_rows}")
 
         check = bool(tf.reduce_all(tf.sparse.reduce_max(cdf, axis=1) > 0))
-        logging.info(f"All random cdf rows have some positive values: {check}")
+        print(f"All random cdf rows have some positive values: {check}")
 
     # Remove negative values
     is_pos = tf.greater_equal(cdf.values, -epsilon)
@@ -158,7 +152,7 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=False):
             .tolist()
         )
 
-        logging.info(f"cdf_sample missing rows: {missing_rows}")
+        print(f"cdf_sample missing rows: {missing_rows}")
 
     # Materialize the samples: Take the first nonzero col of each row
     # s_next = tf.constant([list(item)[0][1] for _, item in \
@@ -170,7 +164,7 @@ def sample_from_sparse_tf(W_sample, seed=None, DEBUG=False):
     )
     s_next = index[:, 1][tf.greater(indices, 0)]
 
-    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
+    print(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
 
     return W_sample, cdf, cdf_sample, s_next
 
@@ -256,7 +250,7 @@ def sample_1_iteration_tf(W, p, q, walk_length=80, symmetrify=True, seed=None):
         S.append(s_next)
 
     # for ii, ss in enumerate(S):  # verbose print
-    #     logging.info(f"s{ii}: {ss}")
+    #     print(f"s{ii}: {ss}")
 
     return S
 
@@ -274,7 +268,7 @@ def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=False):
 
     if DEBUG:
         check = np.min(W_sample.sum(axis=1))
-        logging.info(f"Sum of row is around 1: {check}")
+        print(f"Sum of row is around 1: {check}")
 
     # Compute cdf cumsum with csr matrix
     cdf = W_sample.copy().tocsr()  # ordered by row
@@ -286,7 +280,7 @@ def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=False):
 
     if DEBUG:
         check = np.min(cdf.max(axis=1).todense())
-        logging.info(f"cdf each row has greatest value around 1: {check}")
+        print(f"cdf each row has greatest value around 1: {check}")
 
     # Take the sample
     rs = np.random.RandomState(seed)
@@ -300,13 +294,13 @@ def sample_from_sparse_numpy(W_sample, seed=None, DEBUG=False):
 
     if DEBUG:
         check = np.all(cdf.getnnz(axis=1) > 0)
-        logging.info(f"random cdf has at least 1 entry: {check}")
+        print(f"random cdf has at least 1 entry: {check}")
 
     # Slice out the column indices: starting index of each row
     cdf = cdf.tocsr()
     s_next = cdf.indices[cdf.indptr[:-1]]
 
-    logging.info(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
+    print(f"s_size={len(s_next)} vs. W_size={W_sample.shape[0]}")
 
     return W_sample, cdf, s_next
 
@@ -315,9 +309,9 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     """Take 1 step of the random walk, with numpy / scipy.sparse."""
     W.data = W.data.astype(np.float32)
     if DEBUG:
-        logging.info("Start random walk")
-        logging.info(f"s0={s0.shape}")
-        logging.info(f"s1={s1.shape}")
+        print("Start random walk")
+        print(f"s0={s0.shape}")
+        print(f"s1={s1.shape}")
     num_nodes = W.shape[0]
     # alpha_1 / P
     P = coo_matrix(
@@ -334,9 +328,9 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     R = A_i.multiply(A_i_1)  # elementwise multiply
 
     if DEBUG:
-        logging.info(f"Shape: A_i={A_i.shape}")
-        logging.info(f"Shape: P={P.shape}")
-        logging.info(f"Shape: R={R.shape}")
+        print(f"Shape: A_i={A_i.shape}")
+        print(f"Shape: P={P.shape}")
+        print(f"Shape: R={R.shape}")
 
     # alpha_3 / Q
     Q = A_i - P - R
@@ -344,7 +338,7 @@ def random_walk_sampling_step_numpy(W, s0, s1, p, q, seed=None, DEBUG=False):
     del A_i  # free some memory
     del A_0  # free some memory
     if DEBUG:
-        logging.info(f"Shape: Q={Q.shape}")
+        print(f"Shape: Q={Q.shape}")
     # Combine to get the final weight
     W_i = W.tocsr()[s1, :]
     W_sample = ((1 / p) * P + R + (1 / q) * Q).multiply(W_i)
@@ -442,16 +436,20 @@ def generate_skipgram_numpy(
             iterator = range(num_targets)
         else:
             iterator = range(corpus.shape[1] - 1)
-        
+
         for index in iterator:
-            context = corpus[:, (index+1):min(corpus.shape[1], index+window_size+1)]
+            context = corpus[
+                :, (index + 1) : min(corpus.shape[1], index + window_size + 1)
+            ]
             target = corpus[:, index][:, None].repeat(context.shape[1], axis=1)
             pair = np.stack([target, context], axis=2).reshape([-1, 2])
             samples_out.append(pair)
 
         samples_out = np.concatenate(samples_out, axis=0)
-        samples_out = np.concatenate([samples_out, np.ones((samples_out.shape[0], 1), dtype=int)], axis=1).astype(int)
-        
+        samples_out = np.concatenate(
+            [samples_out, np.ones((samples_out.shape[0], 1), dtype=int)], axis=1
+        ).astype(int)
+
         return samples_out
 
     # Data loading parse func
@@ -487,8 +485,8 @@ def generate_skipgram_numpy(
         writer = tf.data.experimental.TFRecordWriter(data_uri, compression_type="GZIP")
         writer.write(ds)
 
-        t2 = time.time() - tnow  - t1
-        logging.info(f"Making skipgrams batch {k}: generation time: {t1} s, save time: {t2} s")
+        t2 = time.time() - tnow - t1
+        print(f"Making skipgrams batch {k}: generation time: {t1} s, save time: {t2} s")
 
     return data_uri_list, num_rows_saved
 
@@ -720,7 +718,7 @@ class SkipGram(tf.keras.Model):
                     (K.batch_dot(x[1], K.expand_dims(x[0], 2)) + x[2])[:, :, 0]
                 ),
                 name="sampled_softmax_dense",
-            ) # x = [embed_pool, softmax_w, softmax_b]
+            )  # x = [embed_pool, softmax_w, softmax_b]
         else:
             self.dense = Dense(
                 vocab_size, activation="softmax", name="full_softmax_dense"
@@ -804,6 +802,6 @@ def build_keras_model(
     )
     model = skipgram.model()
     model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
-    logging.info(model.summary())
+    print(model.summary())
 
     return model

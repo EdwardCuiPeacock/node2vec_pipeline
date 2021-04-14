@@ -242,39 +242,43 @@ def _create_sampled_training_data(
     # Generate Skipgrams
     logging.info("Generate Skipgrams")
     logging.info(f"Storing graph sampled skipgrams at {storage_path}")
-    for phase in ["train", "eval"]:
-        cur_seed = (cur_seed + 1) if seed is not None else None
+    # for phase in ["train", "eval"]:
+    #     cur_seed = (cur_seed + 1) if seed is not None else None
 
-        # saved_results, num_rows_saved = generate_skipgram_beam(
-        #     sample_metadata[phase]["random_walk_uri_list"],
-        #     vocabulary_size=num_nodes,
-        #     window_size=window_size,
-        #     negative_samples=negative_samples,
-        #     seed=cur_seed,
-        #     feature_names=[f"s{i}" for i in range(walk_length)],
-        #     save_path=os.path.join(storage_path, phase, "skipgrams"),
-        #     temp_dir=temp_dir,
-        #     beam_pipeline_args=beam_pipeline_args,
-        # )
+    #     # saved_results, num_rows_saved = generate_skipgram_beam(
+    #     #     sample_metadata[phase]["random_walk_uri_list"],
+    #     #     vocabulary_size=num_nodes,
+    #     #     window_size=window_size,
+    #     #     negative_samples=negative_samples,
+    #     #     seed=cur_seed,
+    #     #     feature_names=[f"s{i}" for i in range(walk_length)],
+    #     #     save_path=os.path.join(storage_path, phase, "skipgrams"),
+    #     #     temp_dir=temp_dir,
+    #     #     beam_pipeline_args=beam_pipeline_args,
+    #     # )
 
-        saved_results, num_rows_saved = generate_skipgram_numpy(
-            sample_metadata[phase]["random_walk_uri_list"],
-            vocab_size=num_nodes,
-            window_size=window_size,
-            negative_samples=negative_samples,
-            seed=cur_seed,
-            buffer_size=1000,
-            save_path=os.path.join(storage_path, phase),
-        )
+    #     saved_results, num_rows_saved = generate_skipgram_numpy(
+    #         sample_metadata[phase]["random_walk_uri_list"],
+    #         vocab_size=num_nodes,
+    #         window_size=window_size,
+    #         negative_samples=negative_samples,
+    #         seed=cur_seed,
+    #         buffer_size=1000,
+    #         save_path=os.path.join(storage_path, phase),
+    #     )
 
-        sample_metadata[phase]["skipgram_uri_list"] = saved_results
-        sample_metadata[phase]["data_size"] = num_rows_saved
+    #     sample_metadata[phase]["skipgram_uri_list"] = saved_results
+    #     sample_metadata[phase]["data_size"] = num_rows_saved
 
-    train_data_uri_list = sample_metadata["train"]["skipgram_uri_list"]
-    train_data_size = sample_metadata["train"]["data_size"]
-    eval_data_uri_list = sample_metadata["eval"]["skipgram_uri_list"]
-    eval_data_size = sample_metadata["eval"]["data_size"]
+    # train_data_uri_list = sample_metadata["train"]["skipgram_uri_list"]
+    # train_data_size = sample_metadata["train"]["data_size"]
+    # eval_data_uri_list = sample_metadata["eval"]["skipgram_uri_list"]
+    # eval_data_size = sample_metadata["eval"]["data_size"]
 
+    train_data_uri_list = [os.path.join(storage_path, "train", f"skipgrams_{r:05}.tfrecord") for r in range(931)]
+    eval_data_uri_list = [os.path.join(storage_path, "eval", f"skipgrams_{r:05}.tfrecord") for r in range(156)]
+    train_data_size = 378003518
+    eval_data_size = 62996208
     logging.info(f"Successfully created graph sampled skipgrams {storage_path}")
     logging.info("train data")
     logging.info(train_data_uri_list)
@@ -335,7 +339,7 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
 
     def map_fn(x):
         x = tf.io.parse_tensor(x, tf.int64)
-        x.set_shape([None, 3])
+        x.set_shape([None])
         return (tf.cast(x[0], "int32"), tf.cast(x[1], "int32")), tf.cast(x[2], "int32")
 
     # Return as (target, context), label

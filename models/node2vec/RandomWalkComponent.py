@@ -5,7 +5,7 @@ Created on Tue Apr 13 15:39:01 2021
 
 @author: edwardcui
 """
-
+import tfx
 from tfx.dsl.component.experimental.annotations import OutputDict
 from tfx.dsl.component.experimental.annotations import InputArtifact
 from tfx.dsl.component.experimental.annotations import OutputArtifact
@@ -30,6 +30,4 @@ def RandomWalkGen(input_adj: InputArtifact[Examples],
                  ) -> None:
     # Loadin ghte data file
     
-    
-    pass
         

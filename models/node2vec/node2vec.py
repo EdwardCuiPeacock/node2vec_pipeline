@@ -759,10 +759,14 @@ class SkipGram(tf.keras.Model):
     def model(self):
         """Construct the model."""
         x = Input(shape=(1,), dtype="int32", name="target")
-        if self.num_neg_samples > 0:
+        if self.num_neg_samples > 0: 
+            # model output subsampled one-hot vector
+            # (or index == 0 out of num_neg_samples+1 if using sparse categorical cross entropy)
             y = Input(shape=(1,), dtype="int32", name="context")
             return tf.keras.Model(inputs=[x, y], outputs=self.call([x, y]))
-        else:
+        else: 
+            # model outputs the full one-hot vector
+            # (or index out of vocab_size if using sparse categorical cross entropy)
             return tf.keras.Model(inputs=x, outputs=self.call(x))
 
 

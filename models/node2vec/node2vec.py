@@ -400,6 +400,7 @@ def generate_skipgram_numpy(
     seed=None,
     buffer_size=100,
     save_path="/tmp",
+    first_index_as_target=True,
 ):
     """
     Generate SkipGrams, with numpy implementation.
@@ -423,6 +424,8 @@ def generate_skipgram_numpy(
         Path to the output, where batch of record generated
         will be written as "{save_path}/skipgrams_0000x.tfrecord",
         by default "temp"
+    first_index_as_target: bool, optional
+        Use only the first index of the corpus as the target
 
     Returns
     -------
@@ -432,30 +435,23 @@ def generate_skipgram_numpy(
         Number of rows of the samples saved.
     """
 
-    import shutil
-    total, used, free = shutil.disk_usage("/")
-    logging.info("Total: %d GiB" % (total // (2**30)))
-    logging.info("Used: %d GiB" % (used // (2**30)))
-    logging.info("Free: %d GiB" % (free // (2**30)))
-
-    def _make_skipgrams(s):
+    def _make_skipgrams(corpus):
         """Numpy function to make skipgrams."""
         samples_out = []
-
-        for i in range(s.shape[0]):
-            pairs, labels = skipgrams(
-                s[i, :],
-                vocabulary_size=vocab_size,
-                window_size=window_size,
-                negative_samples=negative_samples,
-                seed=seed,
-            )
-            samples = np.concatenate(
-                [np.atleast_2d(np.asarray(pairs)), np.asarray(labels)[:, None]], axis=1
-            )
-            samples_out.append(samples)
+        if first_index_as_target:
+            iterator = range(1)
+        else:
+            iterator = range(corpus.shape[1] - 1)
+        
+        for index in iterator:
+            context = corpus[:, (index+1):min(corpus.shape[1], index+window_size+1)]
+            target = corpus[:, index][:, None].repeat(context.shape[1], axis=1)
+            pair = np.stack([target, context], axis=2).reshape([-1, 2])
+            samples_out.append(pair)
 
         samples_out = np.concatenate(samples_out, axis=0)
+        samples_out = np.concatenate([samples_out, np.ones((samples_out.shape[0], 1), dtype=int)], axis=1).astype(int)
+        
         return samples_out
 
     # Data loading parse func
@@ -488,7 +484,7 @@ def generate_skipgram_numpy(
         #     **{feature_name[i]: features[:, i] for i in range(features.shape[1])},
         # )
         ds = tf.data.Dataset.from_tensor_slices(features).map(tf.io.serialize_tensor)
-        writer = tf.data.experimental.TFRecordWriter(data_uri)
+        writer = tf.data.experimental.TFRecordWriter(data_uri, compression_type="GZIP")
         writer.write(ds)
 
         t2 = time.time() - tnow  - t1

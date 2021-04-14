@@ -267,7 +267,7 @@ def _create_sampled_training_data(
         #     seed=cur_seed,
         #     buffer_size=10000,
         #     save_path=os.path.join(storage_path, phase),
-        #     first_index_as_target=True,
+        #     num_targets=1,
         # )
 
         # sample_metadata[phase]["skipgram_uri_list"] = saved_results
@@ -466,18 +466,22 @@ def run_fn(fn_args):
     # Build the model
     mirrored_strategy = tf.distribute.MirroredStrategy()
     with mirrored_strategy.scope():
-        model = build_keras_model(
-            vocab_size=int(num_nodes),
-            embed_size=model_config.get("embed_size", 32),
-            num_neg_samples=model_config.get("num_neg_samples", 12),
-            loss="sparse_categorical_crossentropy",
-            optimizer="adam",
-            metrics=["accuracy"],
-        )
+        if model_config["continue_training"] is not None and \
+                model_config["continue_training"] != "":
+            model = tf.keras.model.load_model(model_config["continue_training"])
+        else:
+            model = build_keras_model(
+                vocab_size=int(num_nodes),
+                embed_size=model_config.get("embed_size", 32),
+                num_neg_samples=model_config.get("num_neg_samples", 12),
+                loss="sparse_categorical_crossentropy",
+                optimizer="adam",
+                metrics=["accuracy"],
+            )
 
     # Write logs to path
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=fn_args.model_run_dir, update_freq="batch"
+        log_dir=fn_args.model_run_dir, update_freq=1000,
     )
 
     # Model checkpoint
@@ -503,7 +507,7 @@ def run_fn(fn_args):
         validation_data=eval_dataset,
         validation_steps=eval_steps,
         callbacks=[tensorboard_callback, check_points],
-        verbose=1,
+        verbose=2,
     )
 
     # Save and serve the model

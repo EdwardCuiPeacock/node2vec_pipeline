@@ -97,10 +97,14 @@ model_configurations:
     description: Starting seed of graph sample genration. Use null to avoid seeding.
     type: integer
     value: 42
+  continue_training:
+    description: Path to the model to continue training from, be it checkpoint or saved model.
+    type: string
+    value: null
   num_epochs: 
     description: Number of training epochs
     type: integer
-    value: 2
+    value: 10
   train_batch_size: 
     description: Batch size of training
     type: integer

@@ -400,7 +400,7 @@ def generate_skipgram_numpy(
     seed=None,
     buffer_size=100,
     save_path="/tmp",
-    first_index_as_target=True,
+    num_targets=1,
 ):
     """
     Generate SkipGrams, with numpy implementation.
@@ -424,8 +424,8 @@ def generate_skipgram_numpy(
         Path to the output, where batch of record generated
         will be written as "{save_path}/skipgrams_0000x.tfrecord",
         by default "temp"
-    first_index_as_target: bool, optional
-        Use only the first index of the corpus as the target
+    num_targets: int, optional
+        Number of words (starting from the first index) to use as target.
 
     Returns
     -------
@@ -438,8 +438,8 @@ def generate_skipgram_numpy(
     def _make_skipgrams(corpus):
         """Numpy function to make skipgrams."""
         samples_out = []
-        if first_index_as_target:
-            iterator = range(1)
+        if num_targets is not None:
+            iterator = range(num_targets)
         else:
             iterator = range(corpus.shape[1] - 1)
         

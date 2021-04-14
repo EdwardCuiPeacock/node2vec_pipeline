@@ -274,9 +274,9 @@ def _create_sampled_training_data(
     # train_data_size = sample_metadata["train"]["data_size"]
     # eval_data_uri_list = sample_metadata["eval"]["skipgram_uri_list"]
     # eval_data_size = sample_metadata["eval"]["data_size"]
-
-    train_data_uri_list = [os.path.join(storage_path, "train", f"skipgrams_{r:05}.tfrecord") for r in range(931)]
-    eval_data_uri_list = [os.path.join(storage_path, "eval", f"skipgrams_{r:05}.tfrecord") for r in range(156)]
+    base_path = "s://edc-dev/kubeflowpipelines-default/tfx_pipeline_output/node2vec_sports_syn_0_1_1/Trainer/graph_samples/18860"
+    train_data_uri_list = [os.path.join(base_path, "train", f"skipgrams_{r:05}.tfrecord") for r in range(931)]
+    eval_data_uri_list = [os.path.join(base_path, "eval", f"skipgrams_{r:05}.tfrecord") for r in range(156)]
     train_data_size = 378003518
     eval_data_size = 62996208
     logging.info(f"Successfully created graph sampled skipgrams {storage_path}")

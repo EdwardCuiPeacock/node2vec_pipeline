@@ -104,7 +104,7 @@ model_configurations:
   train_batch_size: 
     description: Batch size of training
     type: integer
-    value: 512
+    value: 1024
   eval_batch_size:
     description: Batch size of evaluation. If null, use training batch size
     type: integer

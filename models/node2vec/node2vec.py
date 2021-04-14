@@ -720,7 +720,7 @@ class SkipGram(tf.keras.Model):
                     (K.batch_dot(x[1], K.expand_dims(x[0], 2)) + x[2])[:, :, 0]
                 ),
                 name="sampled_softmax_dense",
-            )  # x = [embed_pool, softmax_w, softmax_b]
+            ) # x = [embed_pool, softmax_w, softmax_b]
         else:
             self.dense = Dense(
                 vocab_size, activation="softmax", name="full_softmax_dense"
@@ -759,14 +759,10 @@ class SkipGram(tf.keras.Model):
     def model(self):
         """Construct the model."""
         x = Input(shape=(1,), dtype="int32", name="target")
-        if self.num_neg_samples > 0: 
-            # model output subsampled one-hot vector
-            # (or index == 0 out of num_neg_samples+1 if using sparse categorical cross entropy)
+        if self.num_neg_samples > 0:
             y = Input(shape=(1,), dtype="int32", name="context")
             return tf.keras.Model(inputs=[x, y], outputs=self.call([x, y]))
-        else: 
-            # model outputs the full one-hot vector
-            # (or index out of vocab_size if using sparse categorical cross entropy)
+        else:
             return tf.keras.Model(inputs=x, outputs=self.call(x))
 
 

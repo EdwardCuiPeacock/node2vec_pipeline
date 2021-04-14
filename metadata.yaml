@@ -100,7 +100,7 @@ model_configurations:
   num_epochs: 
     description: Number of training epochs
     type: integer
-    value: 30
+    value: 2
   train_batch_size: 
     description: Batch size of training
     type: integer
@@ -116,7 +116,7 @@ model_configurations:
   num_neg_samples:
     description: Number of negative samples to take for subsample softmax training
     type: integer
-    value: 15
+    value: 2
   walk_length:
     description: node2vec graph traversal walk length
     type: integer

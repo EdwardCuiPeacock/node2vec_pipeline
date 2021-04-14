@@ -4,7 +4,8 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-from absl import logging
+import logging
+logging.basicConfig(level=logging.INFO)
 
 import pandas as pd
 import numpy as np
@@ -12,6 +13,7 @@ from scipy.sparse import coo_matrix
 
 import tensorflow as tf
 import tensorflow_transform as tft
+from tensorflow.keras.callbacks import EarlyStopping
 
 from models.node2vec.node2vec import (
     generate_skipgram_beam,
@@ -494,9 +496,9 @@ def run_fn(fn_args):
     model.fit(
         train_dataset,
         epochs=num_epochs,
-        steps_per_epoch=train_steps,
+        steps_per_epoch=5000,#train_steps,
         validation_data=eval_dataset,
-        validation_steps=eval_steps,
+        validation_steps=200, #eval_steps,
         callbacks=[tensorboard_callback, check_points],
         verbose=2,
     )

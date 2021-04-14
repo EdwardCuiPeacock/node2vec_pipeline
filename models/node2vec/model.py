@@ -209,14 +209,14 @@ def _create_sampled_training_data(
     #         data_uri = os.path.join(
     #             storage_path, f"random_walk_{phase}", f"graph_sample_{r:05}.tfrecord"
     #         )
-    #         logging.info(f"Phase {phase} r={r} random walk data_uri: {data_uri}")
+    #         print(f"Phase {phase} r={r} random walk data_uri: {data_uri}")
     #         sample_metadata[phase]["random_walk_uri_list"].append(data_uri)
 
     #         ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
     #         writer = tf.data.experimental.TFRecordWriter(data_uri)
     #         writer.write(ds)
 
-    # logging.info(f"Successfully created random walk datasets")
+    # print(f"Successfully created random walk datasets")
 
     sample_metadata = {}
     sample_metadata["train"] = {}
@@ -464,11 +464,12 @@ def run_fn(fn_args):
     )
 
     # Build the model
+    previous_model_path = model_config["continue_training"]
     mirrored_strategy = tf.distribute.MirroredStrategy()
     with mirrored_strategy.scope():
-        if model_config["continue_training"] is not None and \
-                model_config["continue_training"] != "":
-            model = tf.keras.model.load_model(model_config["continue_training"])
+        if previous_model_path is not None and previous_model_path != "":
+            model = tf.keras.models.load_model(previous_model_path)
+            print("Continue training from:", previous_model_path)
         else:
             model = build_keras_model(
                 vocab_size=int(num_nodes),
@@ -498,7 +499,7 @@ def run_fn(fn_args):
     eval_steps = eval_data_size // eval_batch_size + 1 * (
         eval_data_size % eval_batch_size > 0
     )
-    logging.info(f"Train steps: {train_steps}, Eval steps: {eval_steps}")
+    print(f"Train steps: {train_steps}, Eval steps: {eval_steps}")
 
     model.fit(
         train_dataset,

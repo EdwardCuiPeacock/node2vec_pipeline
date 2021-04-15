@@ -100,7 +100,7 @@ model_configurations:
   continue_training:
     description: Path to the model to continue training from, be it checkpoint or saved model.
     type: string
-    value: "{{ PIPELINE_ROOT }}/Trainer/model/19080/serving_model_dir"
+    value: null
   num_epochs: 
     description: Number of training epochs
     type: integer

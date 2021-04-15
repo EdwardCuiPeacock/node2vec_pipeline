@@ -409,6 +409,9 @@ def run_fn(fn_args):
         shuffle=True,
         seed=model_config["seed"],
     )
+    for kk, ii in enumerate(train_dataset):
+        print(kk, ii.shape)
+
     eval_batch_size = model_config.get("eval_batch_size") or train_batch_size
     eval_dataset = _input_fn(
         eval_data_uri_list,
@@ -478,4 +481,4 @@ def run_fn(fn_args):
 
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})
 
-    # raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))
+    raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))

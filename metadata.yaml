@@ -71,7 +71,7 @@ system_configurations:
   enable_cache:
     description: Whether or not to enable caching of execution results
     type: boolean
-    value: True
+    value: False
   enable_gpc_ai_platform_training:
     description: Whether or not to enable GPU training with GCP AI Platform
     type: boolean

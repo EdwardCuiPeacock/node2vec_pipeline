@@ -715,7 +715,6 @@ class SkipGram(tf.keras.Model):
         """Model call."""
         if self.num_neg_samples > 0:  # use sampled softmax
             target_word, context_word = input_data[0], input_data[1]
-            print("batch_size:", target_word.shape)
             if len(target_word.shape) < 2:  # make sure it's 2D
                 target_word = K.expand_dims(target_word, axis=1)
             if len(context_word.shape) < 2:  # make sure it's 2D

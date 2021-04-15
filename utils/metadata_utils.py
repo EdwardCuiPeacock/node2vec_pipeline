@@ -45,8 +45,9 @@ def parse_templated_fields(metadata: Dict) -> Dict:
         else:
             parse_dict.update(get_config(metadata, field))
             
-    
     def _recursive_render(s, cur_key):
+        if s is None:
+            return s
         counter = 0
         while "{{ " in s and " }}" in s:
             s = jinja2.Template(s).render(**parse_dict)

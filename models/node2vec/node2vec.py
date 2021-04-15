@@ -388,10 +388,7 @@ def sample_1_iteration_numpy(W, p, q, walk_length=80, symmetrify=True, seed=None
 # %% Numpy procedure to generate skipgrams
 def generate_skipgram_numpy(
     data_uri,
-    vocab_size=10,
     window_size=4,
-    negative_samples=0.0,
-    seed=None,
     buffer_size=100,
     save_path="/tmp",
     num_targets=1,
@@ -403,14 +400,8 @@ def generate_skipgram_numpy(
     ----------
     data_uri : tf.Tensor
         Features tensor, where each column is a feature.
-    vocab_size : int, optional
-        Size of skipgram vocabulary, by default 10
     window_size : int, optional
         Window size of skipgram, by default 2
-    negative_samples : float, optional
-        Fraction of negative samples of skipgram, by default 0.0
-    seed : int, optional
-        Random seed, by default None
     buffer_size: int, optional
         The buffer size to use when iterating over the data.
         The default is 100.
@@ -458,9 +449,9 @@ def generate_skipgram_numpy(
         xp.set_shape([None])
         return xp
 
-    feature_name = ["target", "context", "label"]
+    # feature_name = ["target", "context", "label"]
     raw_data = (
-        tf.data.TFRecordDataset(data_uri)
+        tf.data.TFRecordDataset(data_uri, compression_type="GZIP")
         .map(parse_tensor_f)
         .batch(buffer_size)
         .as_numpy_iterator()
@@ -477,10 +468,6 @@ def generate_skipgram_numpy(
         data_uri_list.append(data_uri)
         t1 = time.time() - tnow
         # Write to tfrecord with proper format
-        # tensors2tfrecord(
-        #     data_uri,
-        #     **{feature_name[i]: features[:, i] for i in range(features.shape[1])},
-        # )
         ds = tf.data.Dataset.from_tensor_slices(features).map(tf.io.serialize_tensor)
         writer = tf.data.experimental.TFRecordWriter(data_uri, compression_type="GZIP")
         writer.write(ds)

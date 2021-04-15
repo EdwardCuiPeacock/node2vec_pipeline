@@ -2,6 +2,7 @@
 
 from __future__ import division
 from __future__ import print_function
+from itertools import compress
 
 import os
 
@@ -73,7 +74,6 @@ def _create_sampled_training_data(
     data_accessor,
     tf_transform_output,
     window_size,
-    negative_samples,
     p,
     q,
     walk_length,
@@ -99,8 +99,6 @@ def _create_sampled_training_data(
         A TFTransformOutput.
     window_size : int, optional
         Window size of skipgram, by default 2
-    negative_samples : float, optional
-        Fraction of negative samples of skipgram, by default 0.0
     p : float
         node2vec Return Parameter
     q : float
@@ -211,7 +209,9 @@ def _create_sampled_training_data(
             sample_metadata[phase]["random_walk_uri_list"].append(data_uri)
 
             ds = tf.data.Dataset.from_tensor_slices(S).map(tf.io.serialize_tensor)
-            writer = tf.data.experimental.TFRecordWriter(data_uri)
+            writer = tf.data.experimental.TFRecordWriter(
+                data_uri, compression_type="GZIP"
+            )
             writer.write(ds)
 
     print(f"Successfully created random walk datasets")
@@ -222,23 +222,9 @@ def _create_sampled_training_data(
     for phase in ["train", "eval"]:
         cur_seed = (cur_seed + 1) if seed is not None else None
         print("Current phase is: ", phase)
-        # saved_results, num_rows_saved = generate_skipgram_beam(
-        #     sample_metadata[phase]["random_walk_uri_list"],
-        #     vocabulary_size=num_nodes,
-        #     window_size=window_size,
-        #     negative_samples=negative_samples,
-        #     seed=cur_seed,
-        #     feature_names=[f"s{i}" for i in range(walk_length)],
-        #     save_path=os.path.join(storage_path, phase, "skipgrams"),
-        #     temp_dir=temp_dir,
-        #     beam_pipeline_args=beam_pipeline_args,
-        # )
         saved_results, num_rows_saved = generate_skipgram_numpy(
             sample_metadata[phase]["random_walk_uri_list"],
-            vocab_size=num_nodes,
             window_size=window_size,
-            negative_samples=negative_samples,
-            seed=cur_seed,
             buffer_size=10000,
             save_path=os.path.join(storage_path, phase),
             num_targets=1,
@@ -291,6 +277,7 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     tf.data.Dataset
         SkipGram training dataset of ((target, context), label)
     """
+
     def map_fn(x):
         x = tf.io.parse_tensor(x, tf.int64)
         x.set_shape([None])
@@ -312,25 +299,6 @@ def _input_fn(data_uri_list, batch_size=128, num_epochs=10, shuffle=False, seed=
     dataset = dataset.batch(batch_size).repeat(num_epochs)
 
     return dataset
-
-
-def _get_serve_tf_examples_fn(model, tf_transform_output):
-    """Returns a function that parses a serialized tf.Example and applies TFT."""
-
-    model.tft_layer = tf_transform_output.transform_features_layer()
-
-    @tf.function
-    def serve_tf_examples_fn(serialized_tf_examples):
-        """Returns the output to be used in the serving signature."""
-        feature_spec = tf_transform_output.raw_feature_spec()
-        feature_spec.pop("weight")  # features.LABEL_KEY
-        parsed_features = tf.io.parse_example(serialized_tf_examples, feature_spec)
-
-        transformed_features = model.tft_layer(parsed_features)
-
-        return model(transformed_features)
-
-    return serve_tf_examples_fn
 
 
 # TFX Trainer will call this function.
@@ -390,7 +358,6 @@ def run_fn(fn_args):
         data_accessor=fn_args.data_accessor,
         tf_transform_output=tf_transform_output,
         window_size=model_config["window_size"],
-        negative_samples=0.0,  # not generating negative samples from the preprocessing; use softmax negative sampling
         p=model_config["p"],
         q=model_config["q"],
         walk_length=model_config["walk_length"],
@@ -470,15 +437,7 @@ def run_fn(fn_args):
         verbose=2,
     )
 
-    # Save and serve the model
-    # signatures = {
-    #     "serving_default": _get_serve_tf_examples_fn(
-    #         model, tf_transform_output
-    #     ).get_concrete_function(
-    #         tf.TensorSpec(shape=[None], dtype=tf.string, name="examples")
-    #     ),
-    # }
-
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})
 
+    # Artificially raise an error so that the training can be rerun
     raise (ValueError("Artificial Error: Attempting to rerun the model with cache ..."))

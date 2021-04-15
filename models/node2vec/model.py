@@ -377,8 +377,7 @@ def run_fn(fn_args):
         seed=model_config["seed"],
     )
     for kk, ii in enumerate(train_dataset):
-        print(kk)
-        print(ii)
+        print(kk, ii[-1].shape)
 
     eval_batch_size = model_config.get("eval_batch_size") or train_batch_size
     eval_dataset = _input_fn(
@@ -435,7 +434,7 @@ def run_fn(fn_args):
         validation_data=eval_dataset,
         validation_steps=eval_steps,
         callbacks=[tensorboard_callback, check_points],
-        verbose=2,
+        verbose=1,
     )
 
     model.save(fn_args.serving_model_dir, save_format="tf", signatures={})

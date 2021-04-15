@@ -5,6 +5,7 @@
 tfx_pipeline_output
 # Default tfx metadata SQLite DB directory
 tfx_metadata
+*.tfrecord
 
 # cache
 __pycache__/

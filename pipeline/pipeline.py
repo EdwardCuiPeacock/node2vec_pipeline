@@ -240,7 +240,7 @@ def create_pipeline(
         components=components,
         enable_cache=enable_cache,
         metadata_connection_config=metadata_connection_config,
-        beam_pipeline_args=(
+        beam_pipeline_args=(  # parse beam pipeline into a list of commands
             [f"--{key}={val}" for key, val in beam_pipeline_args.items()]
             if beam_pipeline_args is not None
             else None

@@ -2,7 +2,7 @@ FROM tensorflow/tfx:0.26.0
 WORKDIR /pipeline
 COPY ./ ./
 ENV PYTHONPATH="/pipeline:${PYTHONPATH}"
-RUN pip install --no-cache-dir psutil tensorflow==2.4.1
+RUN pip install --no-cache-dir psutil
 
 ENV CUDA_VERSION 10.1.243
 ENV CUDA_PKG_VERSION 10-1=$CUDA_VERSION-1

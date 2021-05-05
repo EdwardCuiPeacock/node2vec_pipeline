@@ -53,8 +53,8 @@ def run(metadata_file: Optional[Text] = None):
 
     runner_config = kubeflow_dag_runner.KubeflowDagRunnerConfig(
         kubeflow_metadata_config=metadata_config, tfx_image=tfx_image,
-        pipeline_operator_funcs=([set_memory_request_and_limits(
-            system_config["memory_request"], system_config["memory_limit"])]),
+        #pipeline_operator_funcs=([set_memory_request_and_limits(
+        #    system_config["memory_request"], system_config["memory_limit"])]),
     )
     pod_labels = kubeflow_dag_runner.get_default_pod_labels()
     pod_labels.update(

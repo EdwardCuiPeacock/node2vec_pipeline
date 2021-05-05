@@ -61,9 +61,9 @@ system_configurations:
       masterType: n1-highmem-16
       masterConfig:
         imageUri: "gcr.io/{{ GOOGLE_CLOUD_PROJECT }}/tfx-pipeline"
-        acceleratorConfig:
-          count: 1
-          type: NVIDIA_TESLA_P4
+        #acceleratorConfig:
+        #  count: 1
+        #  type: NVIDIA_TESLA_P4
   KUBEFLOW_RUNNER:
     description: Kubeflow runner .py script to use
     type: string
@@ -75,7 +75,7 @@ system_configurations:
   enable_gpc_ai_platform_training:
     description: Whether or not to enable GPU training with GCP AI Platform
     type: boolean
-    value: False
+    value: True
   preprocessing_fn:
     description: Import path to the preprocessing function relative to the project directory
     type: string

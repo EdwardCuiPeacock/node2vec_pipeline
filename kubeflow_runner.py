@@ -66,7 +66,7 @@ def run(metadata_file: Optional[Text] = None):
     kubeflow_dag_runner.KubeflowDagRunner(
         config=runner_config, pod_labels_to_attach=pod_labels,
         pipeline_operator_funcs=([set_memory_request_and_limits(
-            system_config["memory_request"], system_config["memroy_limit"])])
+            system_config["memory_request"], system_config["memory_limit"])])
     ).run(
         pipeline.create_pipeline(
             pipeline_name=metadata["pipeline_name"]

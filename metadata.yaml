@@ -87,11 +87,11 @@ system_configurations:
   memory_request:
     description: Amount of requeste memory
     type: string
-    value: "32G"
+    value: "16G"
   memory_limit:
     description: Max amount of memory
     type: string
-    value: "64G"
+    value: "20G"
 model_configurations:
   query_script_path:
     description: Path to BigQuery script, relative to the project directory

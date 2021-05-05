@@ -52,7 +52,9 @@ def run(metadata_file: Optional[Text] = None):
     logging.info(f"Current tfx image used: {tfx_image}")
 
     runner_config = kubeflow_dag_runner.KubeflowDagRunnerConfig(
-        kubeflow_metadata_config=metadata_config, tfx_image=tfx_image
+        kubeflow_metadata_config=metadata_config, tfx_image=tfx_image,
+        pipeline_operator_funcs=([set_memory_request_and_limits(
+            system_config["memory_request"], system_config["memory_limit"])]),
     )
     pod_labels = kubeflow_dag_runner.get_default_pod_labels()
     pod_labels.update(
@@ -62,11 +64,9 @@ def run(metadata_file: Optional[Text] = None):
             + metadata["pipeline_version"]
         }
     )
-    
+
     kubeflow_dag_runner.KubeflowDagRunner(
-        config=runner_config, pod_labels_to_attach=pod_labels,
-        pipeline_operator_funcs=([set_memory_request_and_limits(
-            system_config["memory_request"], system_config["memory_limit"])])
+        config=runner_config, pod_labels_to_attach=pod_labels
     ).run(
         pipeline.create_pipeline(
             pipeline_name=metadata["pipeline_name"]

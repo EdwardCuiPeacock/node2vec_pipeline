@@ -71,7 +71,7 @@ system_configurations:
   enable_cache:
     description: Whether or not to enable caching of execution results
     type: boolean
-    value: True
+    value: False
   enable_gpc_ai_platform_training:
     description: Whether or not to enable GPU training with GCP AI Platform
     type: boolean
@@ -124,11 +124,11 @@ model_configurations:
   walk_length:
     description: node2vec graph traversal walk length
     type: integer
-    value: 30
+    value: 6
   train_repetitions:
     description: node2vec graph traversal repetitions for training dataset
     type: integer
-    value: 6
+    value: 10
   eval_repetitions:
     description: node2vec graph traversal repetitions for evaluation dataset
     type: integer

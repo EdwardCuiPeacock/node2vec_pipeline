@@ -71,7 +71,7 @@ system_configurations:
   enable_cache:
     description: Whether or not to enable caching of execution results
     type: boolean
-    value: False
+    value: True
   enable_gpc_ai_platform_training:
     description: Whether or not to enable GPU training with GCP AI Platform
     type: boolean
@@ -84,6 +84,14 @@ system_configurations:
     description: Import path to the model run function relative to the project directory
     type: string
     value: models.node2vec.model.run_fn
+  memory_request:
+    description: Amount of requeste memory
+    type: string
+    value: "32G"
+  memory_limit:
+    description: Max amount of memory
+    type: string
+    value: "64G"
 model_configurations:
   query_script_path:
     description: Path to BigQuery script, relative to the project directory

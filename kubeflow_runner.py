@@ -19,6 +19,15 @@ from tfx.utils import telemetry_utils
 from utils.metadata_utils import get_metadata, get_config
 from pipeline import pipeline
 
+def set_memory_request_and_limits(memory_request, memory_limit):
+    def _set_memory_request_and_limits(task):
+        return (
+            task.container.set_memory_request(memory_request)
+                .set_memory_limit(memory_limit)
+        )
+
+    return _set_memory_request_and_limits
+
 
 def run(metadata_file: Optional[Text] = None):
     """Define a kubeflow pipeline."""
@@ -53,8 +62,11 @@ def run(metadata_file: Optional[Text] = None):
             + metadata["pipeline_version"]
         }
     )
+
     kubeflow_dag_runner.KubeflowDagRunner(
-        config=runner_config, pod_labels_to_attach=pod_labels
+        config=runner_config, pod_labels_to_attach=pod_labels,
+        pipeline_operator_funcs=([set_memory_request_and_limits(
+            system_config["memory_request"], system_config["memroy_limit"])])
     ).run(
         pipeline.create_pipeline(
             pipeline_name=metadata["pipeline_name"]
@@ -76,6 +88,9 @@ def run(metadata_file: Optional[Text] = None):
             model_config=model_config,  # passing model parameters downstream
         )
     )
+
+
+
 
 
 if __name__ == "__main__":
